@@ -1,0 +1,89 @@
+name: notices-check
+
+# B1 acceptance gate (docs/launch/2026-06-27-lp-plan-v3.md +
+# npm-audit-triage.md): THIRD_PARTY_NOTICES.md must regenerate to 0
+# "License text not found" entries from the current production
+# dependency tree AND be byte-identical to the committed file. The
+# script scripts/generate-notices.js + MANUAL_LICENSE_TEXTS fallback
+# is the authoritative content gate; the post-step `git diff
+# --exit-code` is the staleness gate.
+#
+# Why both gates: `npm run notices:check` only fails when the new
+# tree has missing license text. It does NOT fail when the tree
+# rendered into THIRD_PARTY_NOTICES.md differs from the committed
+# file (the codex round-6 verify P0-1 finding: after PR #81's
+# lockfile regen, ~18 lines drift and notices:check still exited 0
+# — a silent stale-doc regression).
+#
+# Self-review (workflow wf_32ebedb1-58d) added forge.config.js +
+# .npmrc + npm-shrinkwrap.json to `paths`, permissions /
+# timeout-minutes / concurrency hardening, and
+# `npm ci --ignore-scripts`.
+#
+# Codex round-6 verify (P0-1) added the post-generator `git diff`
+# step that fails when the regenerated file disagrees with the
+# committed file. The cron was kept; it doubles as a runner/tooling
+# sanity check even though npm tarball drift is already prevented
+# by integrity sums in package-lock.json.
+
+on:
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'npm-shrinkwrap.json'
+      - '.npmrc'
+      - 'scripts/generate-notices.js'
+      - 'forge.config.js'
+      - 'THIRD_PARTY_NOTICES.md'
+      - '.github/workflows/notices-check.yml'
+  push:
+    branches:
+      - main
+  schedule:
+    # Weekly Monday 00:30 UTC, 30 min offset from audit-prod so the
+    # two cron jobs do not contend for the runner.
+    - cron: '30 0 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  notices-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      # --ignore-scripts because the notices generator only reads LICENSE
+      # files; no native rebuild is required for this gate.
+      - name: Clean install (npm ci --ignore-scripts)
+        run: npm ci --ignore-scripts
+
+      - name: Regenerate notices and fail on missing license text
+        run: npm run notices:check
+
+      # Codex round-6 verify P0-1: catch the case where notices:check
+      # succeeds (no missing license texts) but the regenerated content
+      # differs from the committed file. Without this step the gate is
+      # false-green any time a transitive dep version changes through
+      # a lockfile bump (PR #81 produced 18 lines of drift this way).
+      - name: Verify committed THIRD_PARTY_NOTICES.md is current
+        run: |
+          if ! git diff --exit-code -- THIRD_PARTY_NOTICES.md; then
+            echo ""
+            echo "::error::THIRD_PARTY_NOTICES.md is out of date."
+            echo "Run \`npm run notices\` locally and commit the regenerated file."
+            exit 1
+          fi

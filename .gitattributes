@@ -1,0 +1,45 @@
+# .gitattributes — LF normalization (matches .prettierrc endOfLine: lf)
+#
+# Goal: Windows working tree も LF にして prettier --check の false-positive を消す。
+# Windows launcher (.bat/.vbs/.cmd/.ps1) は保守的に CRLF 維持 (native shell 互換性優先)。
+
+# Auto-detect text vs binary; normalize text to LF
+* text=auto eol=lf
+
+# Binary — preserve as-is
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.ico binary
+*.icns binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.mov binary
+*.mp3 binary
+*.mp4 binary
+
+# Web assets — force LF (SVG は XML、diff 可能)
+*.svg text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+
+# JavaScript / config / docs — force LF (prettier endOfLine: lf と一致)
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.rs text eol=lf
+*.plist text eol=lf
+
+# Windows scripts — CRLF 維持 (保守的、native shell 互換性優先)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.vbs text eol=crlf
+*.ps1 text eol=crlf
+
+# Version control config
+.gitignore text eol=lf
+.gitattributes text eol=lf

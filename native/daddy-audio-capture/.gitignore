@@ -1,0 +1,10 @@
+# Cargo build output
+/target
+
+# Smoke-test artifacts (raw PCM dumps + helper stderr). *.log is already
+# covered by the top-level cheating-daddy/.gitignore; we widen *.raw here
+# so any debug capture (capture.raw, test1.raw, debug-44k.raw, etc.) is
+# safe to leave in the workspace without leaking into the repo. Codex
+# review caught the previous `capture*.raw` glob missing test1/test2/test3.
+*.raw
+*.stderr.log
