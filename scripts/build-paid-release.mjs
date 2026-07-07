@@ -5,8 +5,11 @@
 // What this script writes:
 //   out/paid-release/<version>/
 //     ├── installer.exe                 (copy of --installer)
-//     ├── source.zip                    (git archive HEAD, all tracked files)
-//     ├── lockfiles.zip                 (git archive HEAD, three lockfiles)
+//     ├── source.zip                    (git archive HEAD, all tracked files
+//     │                                  minus .gitattributes export-ignore
+//     │                                  paths — buyer-facing product source
+//     │                                  only, no internal ops/lp/ docs)
+//     ├── lockfiles.zip                 (git archive HEAD, two lockfiles)
 //     ├── LICENSE                       (copy of repo root LICENSE)
 //     ├── THIRD_PARTY_NOTICES.md        (copy of repo root notices)
 //     ├── guide.md                      (Windows install guide for the buyer)
@@ -34,8 +37,14 @@
 //   * output_exists         — out/paid-release/<version>/ already exists.
 //   * source_missing_required_entries — git archive of HEAD did not include
 //     one of LICENSE / THIRD_PARTY_NOTICES.md / both distribution guides /
-//     one of the three lockfiles.
-//   * lockfiles_zip_missing — lockfiles.zip is missing one of the three.
+//     one of the two lockfiles.
+//   * source_contains_excluded_entries — git archive of HEAD included a path
+//     that must never reach a buyer (internal handoff/ops docs, the lp/
+//     payment-infrastructure source, etc. — see EXCLUDED_SOURCE_PREFIXES).
+//     This means .gitattributes export-ignore regressed or a new internal
+//     path was added without an export-ignore entry; fix .gitattributes,
+//     do not weaken this gate.
+//   * lockfiles_zip_missing — lockfiles.zip is missing one of the two.
 //   * license_mismatch      — copied LICENSE bytes differ from root.
 //   * notices_mismatch      — copied THIRD_PARTY_NOTICES.md bytes differ.
 //   * lockfile_entry_mismatch — a lockfiles.zip entry's bytes differ from
@@ -78,11 +87,7 @@ void createRequire;
 // Constants
 // ---------------------------------------------------------------------------
 
-const REQUIRED_LOCKFILES = [
-    'package-lock.json',
-    'lp/package-lock.json',
-    'native/daddy-audio-capture/Cargo.lock',
-];
+const REQUIRED_LOCKFILES = ['package-lock.json', 'native/daddy-audio-capture/Cargo.lock'];
 
 const REQUIRED_SOURCE_ENTRIES = [
     'LICENSE',
@@ -91,6 +96,29 @@ const REQUIRED_SOURCE_ENTRIES = [
     'docs/distribution/windows-install-guide.md',
     'docs/distribution/build-from-source.md',
 ];
+
+// Internal-only paths that must NEVER appear in source.zip. These mirror the
+// export-ignore entries in .gitattributes (which is what actually keeps them
+// out of `git archive`'s output); this gate exists so a regression in
+// .gitattributes — or a future internal file added without an export-ignore
+// entry — fails the release build instead of silently shipping to a buyer.
+// Prefixes ending in `/` match a directory and everything under it; entries
+// without a trailing `/` match a single file (exact name, or for the
+// HANDOFF_* case, a fixed prefix + suffix pattern handled specially below).
+const EXCLUDED_SOURCE_PREFIXES = [
+    'GATE1_PRE_MEETING.md',
+    'AGENTS.md',
+    'start.bat',
+    'start-hidden.vbs',
+    'docs/operations/',
+    'docs/superpowers/',
+    'docs/decisions/',
+    'docs/legal/REVIEW-NOTES.md',
+    'lp/',
+];
+
+// HANDOFF_2026-05-*.md is a glob, not a fixed name; matched separately.
+const EXCLUDED_SOURCE_GLOB_RE = /^HANDOFF_2026-05-.*\.md$/;
 
 const GUIDE_REL_PATH = 'docs/distribution/windows-install-guide.md';
 const BUILD_INSTRUCTIONS_REL_PATH = 'docs/distribution/build-from-source.md';
@@ -326,7 +354,7 @@ function gitArchiveLockfiles(repoRoot, version, outputPath) {
     if (r.status !== 0) {
         fail(
             'lockfiles_zip_missing',
-            `git archive of lockfiles failed. Are all three lockfiles tracked at HEAD?\n${r.stderr.trim() || r.stdout.trim()}`
+            `git archive of lockfiles failed. Are both lockfiles tracked at HEAD?\n${r.stderr.trim() || r.stdout.trim()}`
         );
     }
 }
@@ -549,15 +577,37 @@ async function main() {
             }
         }
 
+        // --- fail-closed: source.zip must NEVER contain internal-only paths.
+        // We strip the `<prefix>/` from every entry name and test the
+        // remainder against EXCLUDED_SOURCE_PREFIXES / the HANDOFF_* glob.
+        // This catches a regressed or missing .gitattributes export-ignore
+        // entry before a buyer ever sees the bundle.
+        for (const name of sourceNames) {
+            if (!name.startsWith(sourcePrefixCheck)) continue;
+            const rel = name.slice(sourcePrefixCheck.length);
+            if (rel === '') continue; // the prefix directory entry itself
+            const isExcluded =
+                EXCLUDED_SOURCE_GLOB_RE.test(rel) ||
+                EXCLUDED_SOURCE_PREFIXES.some(
+                    (prefix) => rel === prefix || (prefix.endsWith('/') && rel.startsWith(prefix))
+                );
+            if (isExcluded) {
+                fail(
+                    'source_contains_excluded_entries',
+                    `source.zip contains excluded internal path ${rel}. Check .gitattributes export-ignore entries.`
+                );
+            }
+        }
+
         // --- lockfiles.zip
         const lockfilesZipPath = path.join(outDir, 'lockfiles.zip');
         const lockfilesPrefix = `lockfiles-${args.version}/`;
         gitArchiveLockfiles(repoRoot, args.version, lockfilesZipPath);
         const lockZip = await readZipEntries(lockfilesZipPath);
-        // We need exact-path matching against the prefix, NOT endsWith — the
-        // suffix `package-lock.json` matches both `lp/package-lock.json` and
-        // `package-lock.json` entries, and naive endsWith would pick the
-        // wrong one.
+        // We need exact-path matching against the prefix, NOT endsWith —
+        // even with only two lockfiles today, a future third lockfile nested
+        // under a subdirectory could otherwise collide on a shared
+        // `package-lock.json` / `Cargo.lock` suffix.
         for (const required of REQUIRED_LOCKFILES) {
             const expectedName = `${lockfilesPrefix}${required}`;
             const found = lockZip.entries.some((e) => e.name === expectedName);

@@ -1,6 +1,6 @@
 # WhisperOhKAMI ソースからのビルド手順
 
-最終更新日: 2026-06-30
+最終更新日: 2026-07-07
 対象バージョン: 配布バンドルの `manifest.json.version` に記載のバージョン
 対象 OS: Windows 11 x64（macOS / Linux も技術的にはビルド可能ですが、招待制先行販売のスコープ外です）
 
@@ -14,20 +14,23 @@
 
 | ZIP | 内容 | git archive プレフィックス |
 |---|---|---|
-| `source.zip` | リリース時点での Git 全トラッキングファイル（src、native、docs、設定、3 つのロックファイルすべて） | `whisper-oh-kami-<version>/` |
-| `lockfiles.zip` | 3 つのロックファイルだけを抜き出したもの（再現ビルドの参照用） | `lockfiles-<version>/` |
+| `source.zip` | リリース時点での Git トラッキングファイルのうち、本ソフト（Electron アプリ）のビルドに必要な製品ソースのみ（src、native、docs、設定、2 つのロックファイル）。社内限定の運用ドキュメントやランディングページ（`lp/`）のインフラソースなど、配布バイナリと無関係な内部ファイルは `.gitattributes` の `export-ignore` により除外されています | `whisper-oh-kami-<version>/` |
+| `lockfiles.zip` | 2 つのロックファイルだけを抜き出したもの（再現ビルドの参照用） | `lockfiles-<version>/` |
 
-`source.zip` 内のすべてのファイルは、`manifest.json.commitSha` に記録された Git コミット時点の内容と完全に一致します。コミット SHA は `git archive HEAD` で固定したものであり、リリース後に改変されることはありません。
+`source.zip` 内のすべてのファイルは、`manifest.json.commitSha` に記録された Git コミット時点の内容と完全に一致します（`export-ignore` で除外されたパスを除く）。コミット SHA は `git archive HEAD` で固定したものであり、リリース後に改変されることはありません。
 
 ### 1.1 同梱ロックファイル
 
 | パス | 用途 |
 |---|---|
 | `package-lock.json` | Electron アプリ本体の npm 依存（@google/genai、@huggingface/transformers、electron-squirrel-startup、ollama、ws ほか） |
-| `lp/package-lock.json` | ランディングページ（Astro）と Cloudflare Pages Functions の npm 依存 |
 | `native/daddy-audio-capture/Cargo.lock` | Rust 製ネイティブヘルパ（WASAPI loopback 録音）の Cargo 依存 |
 
 これらは `npm ci` および `cargo build --locked` に渡すことで、リリース時と同一の依存ツリーを再現できます。
+
+### 1.2 同梱されないもの（ランディングページ・社内運用ドキュメント）
+
+`lp/`（ランディングページの Astro / Cloudflare Pages Functions ソース）は `source.zip` に含まれません。`lp/` は本ソフト（配布される Electron バイナリ）の一部ではなく、運用者が別途ホストする決済・配布用の Web サービスであるため、本ソフトの GPL-3.0 対応ソース（Corresponding Source）の範囲外です。同様に、社内限定の運用手順書・意思決定ログなども対応ソースに含まれません。
 
 ---
 
@@ -65,17 +68,7 @@ npm ci
 
 `npm install` ではなく `npm ci` を使ってください。`npm ci` は `package-lock.json` を厳密に再現し、ロックファイルとずれる依存変更を行いません。
 
-### 3.3 LP 依存のインストール（任意）
-
-LP（Astro）部分は、配布物の購入後の運用では再ビルド不要です。LP を自前でプレビューする場合のみインストールしてください。
-
-```powershell
-cd lp
-npm ci
-cd ..
-```
-
-### 3.4 ネイティブヘルパのビルド
+### 3.3 ネイティブヘルパのビルド
 
 ```powershell
 cd native\daddy-audio-capture
@@ -87,7 +80,7 @@ cd ..\..
 
 Electron Forge の `extraResource` 設定がこれを `resources\` に取り込みますので、ビルド前にこの場所に配置されている必要があります（リポジトリの `forge.config.js` を参照してください）。
 
-### 3.5 THIRD_PARTY_NOTICES.md の再生成（任意）
+### 3.4 THIRD_PARTY_NOTICES.md の再生成（任意）
 
 配布バンドルに同梱の `THIRD_PARTY_NOTICES.md` は、リリース時点で `npm run notices` により生成され、`npm run notices:check` のゲートを通過した状態で凍結されています。再生成して同一バイトであることを確認するには次のコマンドを使います。
 
@@ -98,7 +91,7 @@ git diff -- THIRD_PARTY_NOTICES.md
 
 差分が 0 行であればリリース時点と同一です。
 
-### 3.6 Electron アプリのパッケージング
+### 3.5 Electron アプリのパッケージング
 
 ```powershell
 npm run make
@@ -134,13 +127,15 @@ GPL-3.0 §6 で要求される「対応ソースの提供」は次の手段で�
 
 `source.zip` には次のものが含まれます。
 
-- すべての `*.js` / `*.ts` / `*.astro` / `*.rs` ファイル
-- ビルドに必要な `package.json` / `Cargo.toml` / `Cargo.lock` / `package-lock.json`（root と `lp/`）
+- すべての `*.js` / `*.ts` / `*.rs` ファイル（`src/`、`native/`、`scripts/`、`tests/`）
+- ビルドに必要な `package.json` / `Cargo.toml` / `Cargo.lock` / `package-lock.json`（root）
 - ライセンス（`LICENSE`）と第三者通知（`THIRD_PARTY_NOTICES.md`）
-- 本ガイド（`docs/distribution/build-from-source.md`）と Windows インストールガイド（`docs/distribution/windows-install-guide.md`）
-- リポジトリの設定ファイル（`forge.config.js`、`.prettierrc` 等）
+- 本ガイド（`docs/distribution/build-from-source.md`）と Windows インストールガイド（`docs/distribution/windows-install-guide.md`）、その他 `docs/legal/`・`docs/brand/`・`docs/distribution/` 配下の公開ドキュメント
+- リポジトリの設定ファイル（`forge.config.js`、`.prettierrc`、`.github/` 等）
 
 `node_modules/` は同梱しません（GPL §6 上、ロックファイルから機械的に再現できる依存は対応ソースに含める必要はありません）。
+
+`lp/`（ランディングページ・決済インフラのソース）および社内限定の運用ドキュメント（`docs/operations/`、`docs/superpowers/`、`docs/decisions/`、`docs/legal/REVIEW-NOTES.md` ほか）は同梱しません。これらは本ソフト（配布される Electron バイナリ）の対応ソースではなく、運用者側のインフラ・内部意思決定記録です（`.gitattributes` の `export-ignore` により `git archive` の時点で除外されます）。
 
 ---
 

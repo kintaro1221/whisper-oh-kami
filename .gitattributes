@@ -43,3 +43,29 @@
 # Version control config
 .gitignore text eol=lf
 .gitattributes text eol=lf
+
+# ---------------------------------------------------------------------------
+# export-ignore — paid-release source.zip / public-mirror exclusions
+#
+# `git archive` (used by scripts/build-paid-release.mjs to build source.zip,
+# and by any `git archive`-based export to the public mirror repo) omits any
+# path marked `export-ignore` below. These are internal-only artifacts that
+# must NOT reach buyers or the public repo: dated internal handoff/meeting
+# notes, agent-workflow instructions, hidden-launcher scripts, and the
+# operations/superpowers/decisions/legal-closure-ledger docs trees, plus the
+# entire lp/ payment-infrastructure source (Astro LP + Cloudflare Pages
+# Functions — server-side infra the operator runs, not part of the
+# distributed Electron binary, so it is not GPL Corresponding Source for the
+# installer). Keep this list in sync with scripts/build-paid-release.mjs's
+# EXCLUDED_SOURCE_ENTRIES gate.
+# ---------------------------------------------------------------------------
+HANDOFF_2026-05-*.md export-ignore
+GATE1_PRE_MEETING.md export-ignore
+AGENTS.md export-ignore
+start.bat export-ignore
+start-hidden.vbs export-ignore
+docs/operations/ export-ignore
+docs/superpowers/ export-ignore
+docs/decisions/ export-ignore
+docs/legal/REVIEW-NOTES.md export-ignore
+lp/ export-ignore

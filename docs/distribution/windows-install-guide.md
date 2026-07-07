@@ -1,6 +1,6 @@
 # WhisperOhKAMI Windows インストールガイド
 
-最終更新日: 2026-06-30
+最終更新日: 2026-07-07
 対象バージョン: v0.7.0 系（招待制先行販売）
 対象 OS: Windows 11 x64
 
@@ -30,7 +30,7 @@ macOS / Linux 版は本サービス v1 のスコープでは配布していま�
 |---|---|
 | `installer.exe` | Windows 用インストーラ（Squirrel.Windows 形式、未署名） |
 | `source.zip` | リリース時点での Git 全トラッキングファイルのアーカイブ（対応ソース） |
-| `lockfiles.zip` | 再現ビルドに必要な 3 つのロックファイル（root `package-lock.json`、`lp/package-lock.json`、`native/daddy-audio-capture/Cargo.lock`） |
+| `lockfiles.zip` | 再現ビルドに必要な 2 つのロックファイル（root `package-lock.json`、`native/daddy-audio-capture/Cargo.lock`） |
 | `LICENSE` | GPL-3.0 ライセンス全文 |
 | `THIRD_PARTY_NOTICES.md` | npm 本番依存の各パッケージのライセンス通知 |
 | `guide.md` | 本ファイル |
