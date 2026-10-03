@@ -1353,7 +1353,7 @@ MIT License
 
 ---
 
-## adm-zip@0.6.0
+## adm-zip@0.6.1
 
 License: MIT
 
@@ -4454,7 +4454,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ---
 
-## protobufjs@7.6.4
+## protobufjs@7.6.6
 
 License: BSD-3-Clause
 
