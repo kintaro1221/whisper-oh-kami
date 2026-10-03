@@ -6,17 +6,17 @@
  * import this spec to render the δ-B「手当て耳 + 3 dots 余韻」mark.
  *
  * Tweak path / strokeWidth / dots / centroid / iconCanvasScale here once;
- * both consumers stay in sync automatically. (Pre-集約: PR #27 のように 2
+ * both consumers stay in sync automatically. (Pre-集約: 以前は 2
  * ファイルを手動同期する必要があった。)
  *
  * Loading:
  *   - Renderer (ESM in Chromium): static `import { BRAND_MARK_SPEC } from './brand-mark-spec.mjs'`
  *   - Node CJS (build-icons.js):  dynamic `await import(pathToFileURL(...).href)`
  *
- * Stroke / dot geometry tuning (post PR #27 clarity-pass for 22px display):
+ * Stroke / dot geometry tuning (clarity-pass for 22px display):
  *   - sidebar / MainView title は 22px 表示 → scale 0.46 で stroke ~1.6px、
  *     最小 dot 半径 ~0.74px。
- *   - 旧 PR #19 A3 = stroke 2.5 / 最小 dot r=1.2 op=0.5 は 22px / app icon
+ *   - 旧仕様 A3 = stroke 2.5 / 最小 dot r=1.2 op=0.5 は 22px / app icon
  *     16-24px で sub-pixel 化していたため、stroke 3.5 / dots r=2.0/1.8/1.6
  *     op=1.0/0.85/0.7 に強化。72px hero ではやや太めだが cascade の意図は保持。
  */

@@ -288,3 +288,31 @@ describe('DeepgramService.isConnected', () => {
         expect(dg.isConnected()).toBe(false);
     });
 });
+
+// ── disconnect detaches callbacks (session-generation guard, v0.7.5) ──────
+
+describe('DeepgramService.disconnect — detaches callbacks', () => {
+    test('a final arriving during the close handshake does not reach onTranscript', () => {
+        const dg = new DeepgramService();
+        const onTranscript = jest.fn();
+        const onStatus = jest.fn();
+        dg.connect('FAKEKEY', onTranscript, onStatus);
+        const ws = FakeWebSocket._instances[0];
+        dg.disconnect();
+        ws.emit(
+            'message',
+            Buffer.from(
+                JSON.stringify({
+                    type: 'Results',
+                    is_final: true,
+                    channel: { alternatives: [{ transcript: '予算は100万円です' }] },
+                })
+            )
+        );
+        ws.emit('error', new Error('late'));
+        expect(onTranscript).not.toHaveBeenCalled();
+        // The 'disconnected' notification itself is still delivered exactly once.
+        expect(onStatus).toHaveBeenCalledTimes(1);
+        expect(onStatus).toHaveBeenCalledWith('disconnected');
+    });
+});

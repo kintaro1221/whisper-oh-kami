@@ -565,6 +565,105 @@ export class CheatingDaddyApp extends LitElement {
             background: var(--bg-app);
         }
 
+        /* ── Recording-consent modal (replaces window.confirm — see
+           confirmRecordingConsent()) ── */
+        .consent-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.45);
+            -webkit-app-region: no-drag;
+        }
+
+        .consent-card {
+            width: min(360px, calc(100vw - 48px));
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-lg);
+            padding: var(--space-lg);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .consent-message {
+            font-size: var(--font-size-sm);
+            line-height: var(--line-height-reading);
+            color: var(--text-primary);
+            white-space: pre-line;
+            margin-bottom: var(--space-lg);
+        }
+
+        .consent-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: var(--space-sm);
+        }
+
+        .consent-btn {
+            cursor: pointer;
+            padding: 8px 16px;
+            border-radius: var(--radius-sm);
+            font-size: var(--font-size-sm);
+            font-weight: var(--font-weight-semibold);
+            border: 1px solid transparent;
+            transition:
+                background var(--transition),
+                border-color var(--transition);
+        }
+
+        .consent-btn-secondary {
+            background: transparent;
+            border-color: var(--border-strong);
+            color: var(--text-secondary);
+        }
+
+        .consent-btn-secondary:hover {
+            background: var(--bg-hover);
+        }
+
+        .consent-btn-primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #ffffff;
+        }
+
+        .consent-btn-primary:hover {
+            background: var(--accent-hover);
+            border-color: var(--accent-hover);
+        }
+
+        /* Pre-start constraint modal for 検証中 modes (byok / local) — reuses
+           the consent-overlay / consent-card / consent-btn styles above. */
+        .experimental-title {
+            font-size: var(--font-size-sm);
+            font-weight: var(--font-weight-semibold);
+            color: var(--text-primary);
+            margin-bottom: var(--space-sm);
+        }
+
+        .experimental-intro {
+            margin-bottom: 0;
+        }
+
+        .experimental-list {
+            margin: var(--space-sm) 0 var(--space-lg);
+            padding-left: 1.2em;
+            font-size: var(--font-size-sm);
+            line-height: var(--line-height-reading);
+            color: var(--text-primary);
+        }
+
+        .experimental-list li + li {
+            margin-top: 4px;
+        }
+
+        .consent-btn:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+
         ::-webkit-scrollbar {
             width: 6px;
             height: 6px;
@@ -609,6 +708,9 @@ export class CheatingDaddyApp extends LitElement {
         _whisperError: { state: true },
         _sidebarUserCollapsed: { state: true },
         _diagnostic: { state: true },
+        _recordingConsentOpen: { state: true },
+        _experimentalOpen: { state: true },
+        _experimentalMode: { state: true },
     };
 
     constructor() {
@@ -624,6 +726,7 @@ export class CheatingDaddyApp extends LitElement {
         this.selectedImageQuality = 'medium';
         this.layoutMode = 'normal';
         this.sttMode = 'local';
+        this._sessionProviderMode = null;
         this.responses = [];
         this.currentResponseIndex = -1;
         this._viewInstances = new Map();
@@ -641,24 +744,46 @@ export class CheatingDaddyApp extends LitElement {
         this._sidebarUserCollapsed = false;
         this._diagnostic = null;
 
+        // Recording-consent modal state — see confirmRecordingConsent().
+        // RecordingConsentGate is loaded as a plain <script> global (see
+        // src/utils/recordingConsentGate.js + index.html), same pattern as
+        // whisperBarState / discoveryPhase. Guarded so a headless / test
+        // environment without that global fails closed instead of throwing.
+        const ConsentGate = (typeof window !== 'undefined' && window.RecordingConsentGate) || null;
+        this._recordingConsentGate = ConsentGate ? new ConsentGate() : null;
+        this._recordingConsentOpen = false;
+
+        // 検証中-mode constraint modal — see confirmExperimentalMode(). A
+        // second, independent instance of the same generic gate (no new state
+        // machine); same fail-closed guard when the global is missing.
+        this._experimentalGate = ConsentGate ? new ConsentGate() : null;
+        this._experimentalOpen = false;
+        this._experimentalMode = null;
+
         this._loadFromStorage();
         this._checkForUpdates();
     }
 
     async _checkForUpdates() {
-        // A7: the update check points at our own GitHub Releases (Gate 0 =
-        // public continue). While the repo is still private or has no published
-        // release, the fetch 404s and this silently no-ops — it starts working
-        // automatically once the repo is public and a release exists.
-        const RELEASES_API = 'https://api.github.com/repos/kintaro1221/whisper-oh-kami/releases/latest';
+        // The update check points at the LP (Cloudflare Pages) sales
+        // infrastructure, not the GitHub Releases REST API: the source repo
+        // is private, so that endpoint always 404ed and no purchaser ever
+        // saw an update notice. `/api/release/latest` reads
+        // the same D1 `artifact_channels` row that `/api/download` already
+        // uses as the entitlement source of truth, so activating a release
+        // there (see docs/operations/paid-build-release.md §8) makes this
+        // check follow automatically. Before any release has been activated,
+        // or on any network hiccup, the endpoint 404s and this silently
+        // no-ops — same fail-quiet shape as before.
+        const RELEASE_API = 'https://whisperohkami.pages.dev/api/release/latest';
         try {
             this._localVersion = await whisperOhKami.getVersion();
             this.requestUpdate();
 
-            const res = await fetch(RELEASES_API, { headers: { Accept: 'application/vnd.github+json' } });
+            const res = await fetch(RELEASE_API);
             if (!res.ok) return;
             const release = await res.json();
-            const remoteVersion = String(release.tag_name || '').replace(/^v/, '');
+            const remoteVersion = String(release.version || '').replace(/^v/, '');
             if (!remoteVersion) return;
 
             const toNum = v =>
@@ -674,7 +799,7 @@ export class CheatingDaddyApp extends LitElement {
                 this.requestUpdate();
             }
         } catch (e) {
-            // silently ignore (offline / private repo / no release yet)
+            // silently ignore (offline / LP unreachable / no release activated yet)
         }
     }
 
@@ -859,83 +984,199 @@ export class CheatingDaddyApp extends LitElement {
 
     // ── Session start ──
 
-    // Phase 1g (post-3.8): minimal recording-consent gate. Per ROADMAP v3
-    // short-term #4 — the goal is just to block both UI Start and the
-    // ctrl/cmd+enter keyboard shortcut from spinning up provider init or
-    // capture without an explicit confirm. Persistent consent log, audit
-    // trail, regional legal text, and styled in-app modal are deferred to
-    // long-term Phase 0' (法務確認枠 / individual-sale launch prep).
+    // Phase 1g (post-3.8): recording-consent gate. Per ROADMAP v3 short-term
+    // #4 — block both UI Start and the ctrl/cmd+enter keyboard shortcut from
+    // spinning up provider init or capture without an explicit confirm.
+    //
+    // Originally used window.confirm(). In the packaged, transparent /
+    // frameless overlay window, Windows renders window.confirm() as a
+    // body-less, button-less ~160x28px dialog placed off-screen instead of a
+    // real prompt, and the renderer blocks synchronously on it — every
+    // session start looked frozen until that invisible dialog was dismissed.
+    // Replaced with an in-app Lit modal (rendered via _renderRecordingConsent(),
+    // driven by RecordingConsentGate — src/utils/recordingConsentGate.js —
+    // which owns the Promise<boolean> + de-dup state machine so it stays
+    // unit-testable without Lit/DOM). Persistent consent log, audit trail,
+    // and regional legal text are still deferred to long-term Phase 0'
+    // (法務確認枠 / individual-sale launch prep).
     //
     // Extracted into a method so tests / Phase 0' replacement can override
     // without touching handleStart's downstream branching.
     async confirmRecordingConsent() {
-        const message = t('app.recording_consent.message');
-        if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
-            return window.confirm(message);
+        if (!this._recordingConsentGate) {
+            // Headless / test environments without the gate global loaded:
+            // fail-closed (treat as not consented) so capture cannot start
+            // unattended.
+            return false;
         }
-        // Headless / test environments without window.confirm: fail-closed
-        // (treat as not consented) so capture cannot start unattended.
-        return false;
+        return this._recordingConsentGate.request(() => {
+            if (!this.shadowRoot) {
+                // Fail-closed: nothing to render the modal into.
+                throw new Error('recording consent modal unavailable (no shadowRoot)');
+            }
+            this._recordingConsentOpen = true;
+            this.requestUpdate();
+        });
+    }
+
+    // Called by the modal's primary button (and Enter, via native <button>
+    // keyboard activation once it is focused).
+    _acceptRecordingConsent() {
+        this._recordingConsentOpen = false;
+        if (this._recordingConsentGate) this._recordingConsentGate.accept();
+        this.requestUpdate();
+    }
+
+    // Called by the modal's secondary button and by Escape.
+    _cancelRecordingConsent() {
+        this._recordingConsentOpen = false;
+        if (this._recordingConsentGate) this._recordingConsentGate.cancel();
+        this.requestUpdate();
+    }
+
+    _handleRecordingConsentKeydown(e) {
+        if (e.key === 'Escape' || e.key === 'Esc') {
+            e.preventDefault();
+            e.stopPropagation();
+            this._cancelRecordingConsent();
+        }
+    }
+
+    // v0.7.5: byok (Gemini) and local (Ollama) are 検証中 — only trial is a
+    // verified mode. Before every byok / local session start (no "don't show
+    // again"), show the mode's constraints in an in-app modal driven by a
+    // second RecordingConsentGate instance. Resolves true when the user
+    // accepts, false when they go back to trial (button or Escape). Fails
+    // closed like confirmRecordingConsent() when the gate or shadowRoot is
+    // unavailable.
+    async confirmExperimentalMode(mode) {
+        if (!this._experimentalGate) {
+            return false;
+        }
+        return this._experimentalGate.request(() => {
+            if (!this.shadowRoot) {
+                throw new Error('experimental mode modal unavailable (no shadowRoot)');
+            }
+            this._experimentalMode = mode;
+            this._experimentalOpen = true;
+            this.requestUpdate();
+        });
+    }
+
+    // Primary button: 「制約を理解して開始」.
+    _acceptExperimental() {
+        this._experimentalOpen = false;
+        if (this._experimentalGate) this._experimentalGate.accept();
+        this.requestUpdate();
+    }
+
+    // Secondary button 「お試しモードに戻る」 and Escape.
+    _cancelExperimental() {
+        this._experimentalOpen = false;
+        if (this._experimentalGate) this._experimentalGate.cancel();
+        this.requestUpdate();
+    }
+
+    _handleExperimentalKeydown(e) {
+        if (e.key === 'Escape' || e.key === 'Esc') {
+            e.preventDefault();
+            e.stopPropagation();
+            this._cancelExperimental();
+        }
     }
 
     async handleStart() {
-        // Recording-consent gate — must run before *any* provider init or
-        // capture call so a cancelled confirm leaves zero side effects.
-        const consented = await this.confirmRecordingConsent();
-        if (!consented) {
-            return;
-        }
-
-        const prefs = await whisperOhKami.storage.getPreferences();
-        const providerMode = prefs.providerMode === 'cloud' ? 'byok' : prefs.providerMode || 'trial';
-
-        if (providerMode === 'trial') {
-            const success = await whisperOhKami.initializeTrial(this.selectedProfile);
-            if (!success) {
-                const mainView = this.shadowRoot.querySelector('main-view');
-                if (mainView && mainView.triggerApiKeyError) {
-                    mainView.triggerApiKeyError();
-                }
-                return;
-            }
-        } else if (providerMode === 'local') {
-            const success = await whisperOhKami.initializeLocal(this.selectedProfile);
-            if (!success) {
-                const mainView = this.shadowRoot.querySelector('main-view');
-                if (mainView && mainView.triggerApiKeyError) {
-                    mainView.triggerApiKeyError();
-                }
-                return;
-            }
-        } else {
-            const apiKey = await whisperOhKami.storage.getApiKey();
-            if (!apiKey || apiKey === '') {
-                const mainView = this.shadowRoot.querySelector('main-view');
-                if (mainView && mainView.triggerApiKeyError) {
-                    mainView.triggerApiKeyError();
-                }
+        // Re-entry guard: a double click / double Ctrl+Enter while the
+        // consent or 検証中 modal is showing must not run a second start
+        // (the modals de-dup, so both calls would otherwise init twice).
+        if (this._startInFlight) return;
+        this._startInFlight = true;
+        try {
+            // Recording-consent gate — must run before *any* provider init or
+            // capture call so a cancelled confirm leaves zero side effects.
+            const consented = await this.confirmRecordingConsent();
+            if (!consented) {
                 return;
             }
 
-            await whisperOhKami.initializeGemini(this.selectedProfile, this.selectedLanguage);
-        }
+            const prefs = await whisperOhKami.storage.getPreferences();
+            const providerMode = prefs.providerMode === 'cloud' ? 'byok' : prefs.providerMode || 'trial';
 
-        if (providerMode === 'trial') {
-            whisperOhKami.startTrialCapture(prefs.micDeviceId || '');
-        } else {
-            whisperOhKami.startCapture(
-                this.selectedScreenshotInterval,
-                this.selectedImageQuality,
-                prefs.micDeviceId || '',
-                prefs.systemDeviceId || 'auto'
-            );
+            // 検証中 modes: show the constraints before any provider init or
+            // capture. Declining switches the saved mode back to trial and aborts
+            // this start (the user presses Start again in trial).
+            if (providerMode !== 'trial') {
+                const ok = await this.confirmExperimentalMode(providerMode);
+                if (!ok) {
+                    // Reflect the switch on the home mode cards right away
+                    // (MainView._saveMode also persists providerMode).
+                    const mainView = this.shadowRoot && this.shadowRoot.querySelector('main-view');
+                    if (mainView && typeof mainView._saveMode === 'function') {
+                        await mainView._saveMode('trial');
+                    } else {
+                        await whisperOhKami.storage.updatePreference('providerMode', 'trial');
+                        if (mainView) {
+                            mainView._mode = 'trial';
+                            mainView._keyError = false;
+                        }
+                    }
+                    this.requestUpdate();
+                    return;
+                }
+            }
+
+            if (providerMode === 'trial') {
+                const success = await whisperOhKami.initializeTrial(this.selectedProfile);
+                if (!success) {
+                    const mainView = this.shadowRoot.querySelector('main-view');
+                    if (mainView && mainView.triggerApiKeyError) {
+                        mainView.triggerApiKeyError();
+                    }
+                    return;
+                }
+            } else if (providerMode === 'local') {
+                const success = await whisperOhKami.initializeLocal(this.selectedProfile);
+                if (!success) {
+                    const mainView = this.shadowRoot.querySelector('main-view');
+                    if (mainView && mainView.triggerApiKeyError) {
+                        mainView.triggerApiKeyError();
+                    }
+                    return;
+                }
+            } else {
+                const apiKey = await whisperOhKami.storage.getApiKey();
+                if (!apiKey || apiKey === '') {
+                    const mainView = this.shadowRoot.querySelector('main-view');
+                    if (mainView && mainView.triggerApiKeyError) {
+                        mainView.triggerApiKeyError();
+                    }
+                    return;
+                }
+
+                await whisperOhKami.initializeGemini(this.selectedProfile, this.selectedLanguage);
+            }
+
+            if (providerMode === 'trial') {
+                whisperOhKami.startTrialCapture(prefs.micDeviceId || '');
+            } else {
+                whisperOhKami.startCapture(
+                    this.selectedScreenshotInterval,
+                    this.selectedImageQuality,
+                    prefs.micDeviceId || '',
+                    prefs.systemDeviceId || 'auto'
+                );
+            }
+            // Remembered for the live-bar STT badge (where the audio goes).
+            this._sessionProviderMode = providerMode;
+            this.responses = [];
+            this.currentResponseIndex = -1;
+            this.startTime = Date.now();
+            this.sessionActive = true;
+            this.currentView = 'assistant';
+            this._startTimer();
+        } finally {
+            this._startInFlight = false;
         }
-        this.responses = [];
-        this.currentResponseIndex = -1;
-        this.startTime = Date.now();
-        this.sessionActive = true;
-        this.currentView = 'assistant';
-        this._startTimer();
     }
 
     async handleAPIKeyHelp() {
@@ -1020,6 +1261,20 @@ export class CheatingDaddyApp extends LitElement {
         if (changedProperties.has('currentView') && window.require) {
             const { ipcRenderer } = window.require('electron');
             ipcRenderer.send('view-changed', this.currentView);
+        }
+
+        if (changedProperties.has('_recordingConsentOpen') && this._recordingConsentOpen) {
+            // Focus the accept button so Enter agrees and Escape (handled by
+            // the overlay's keydown listener) cancels.
+            const acceptBtn = this.shadowRoot && this.shadowRoot.querySelector('.consent-btn-primary');
+            if (acceptBtn) acceptBtn.focus();
+        }
+
+        if (changedProperties.has('_experimentalOpen') && this._experimentalOpen) {
+            // Same as the consent modal: Enter accepts the constraints, Escape
+            // (overlay keydown) goes back to trial.
+            const acceptBtn = this.shadowRoot && this.shadowRoot.querySelector('.experimental-overlay .consent-btn-primary');
+            if (acceptBtn) acceptBtn.focus();
         }
     }
 
@@ -1132,13 +1387,59 @@ export class CheatingDaddyApp extends LitElement {
                     <div>${t(diagnostic.causeKey)}</div>
                     <div>${t(diagnostic.actionKey)}</div>
                     ${diagnostic.detail ? html`<div class="diagnostic-detail">${diagnostic.detail}</div>` : ''}
-                    ${diagnostic.actionUrl
-                        ? html`<div>
-                              <span class="diagnostic-link" @click=${() => this.handleExternalLinkClick(diagnostic.actionUrl)}
-                                  >${diagnostic.actionUrl}</span
-                              >
-                          </div>`
-                        : ''}
+                    ${
+                        diagnostic.actionUrl
+                            ? html`<div>
+                                  <span class="diagnostic-link" @click=${() => this.handleExternalLinkClick(diagnostic.actionUrl)}
+                                      >${diagnostic.actionUrl}</span
+                                  >
+                              </div>`
+                            : ''
+                    }
+                </div>
+            </div>
+        `;
+    }
+
+    _renderRecordingConsent() {
+        if (!this._recordingConsentOpen) return '';
+        return html`
+            <div class="consent-overlay" @keydown=${e => this._handleRecordingConsentKeydown(e)}>
+                <div class="consent-card" role="alertdialog" aria-modal="true" aria-labelledby="consent-message">
+                    <div id="consent-message" class="consent-message">${t('app.recording_consent.message')}</div>
+                    <div class="consent-actions">
+                        <button class="consent-btn consent-btn-secondary" @click=${() => this._cancelRecordingConsent()}>
+                            ${t('app.recording_consent.cancel')}
+                        </button>
+                        <button class="consent-btn consent-btn-primary" @click=${() => this._acceptRecordingConsent()}>
+                            ${t('app.recording_consent.accept')}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    _renderExperimentalMode() {
+        if (!this._experimentalOpen) return '';
+        const mode = this._experimentalMode === 'local' ? 'local' : 'byok';
+        const modeName = t(`main.mode_card.${mode}.title`);
+        return html`
+            <div class="consent-overlay experimental-overlay" @keydown=${e => this._handleExperimentalKeydown(e)}>
+                <div class="consent-card" role="alertdialog" aria-modal="true" aria-labelledby="experimental-title">
+                    <div id="experimental-title" class="experimental-title">${t('experimental.title').replace('{mode}', modeName)}</div>
+                    <div class="consent-message experimental-intro">${t('experimental.intro')}</div>
+                    <ul class="experimental-list">
+                        ${[1, 2, 3].map(i => html`<li>${t(`experimental.${mode}.${i}`)}</li>`)}
+                    </ul>
+                    <div class="consent-actions">
+                        <button class="consent-btn consent-btn-secondary" @click=${() => this._cancelExperimental()}>
+                            ${t('experimental.back')}
+                        </button>
+                        <button class="consent-btn consent-btn-primary" @click=${() => this._acceptExperimental()}>
+                            ${t('experimental.accept')}
+                        </button>
+                    </div>
                 </div>
             </div>
         `;
@@ -1279,26 +1580,25 @@ export class CheatingDaddyApp extends LitElement {
                         ${toggleIcon}
                         <span class="sidebar-collapse-toggle-label">${toggleLabel}</span>
                     </button>
-                    ${this._updateAvailable
-                        ? html`
-                              <button
-                                  class="update-btn"
-                                  @click=${() => this.handleExternalLinkClick('https://github.com/kintaro1221/whisper-oh-kami/releases/latest')}
-                              >
-                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                                      <path
-                                          fill="none"
-                                          stroke="currentColor"
-                                          stroke-linecap="round"
-                                          stroke-linejoin="round"
-                                          stroke-width="2"
-                                          d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 11l5 5l5-5m-5-7v12"
-                                      />
-                                  </svg>
-                                  <span class="update-btn-label">${t('common.update_available')}</span>
-                              </button>
-                          `
-                        : html`<div class="version-text">v${this._localVersion}</div>`}
+                    ${
+                        this._updateAvailable
+                            ? html`
+                                  <button class="update-btn" @click=${() => this.handleExternalLinkClick('https://whisperohkami.pages.dev/')}>
+                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                          <path
+                                              fill="none"
+                                              stroke="currentColor"
+                                              stroke-linecap="round"
+                                              stroke-linejoin="round"
+                                              stroke-width="2"
+                                              d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 11l5 5l5-5m-5-7v12"
+                                          />
+                                      </svg>
+                                      <span class="update-btn-label">${t('common.update_available')}</span>
+                                  </button>
+                              `
+                            : html`<div class="version-text">v${this._localVersion}</div>`
+                    }
                 </div>
             </div>
         `;
@@ -1312,12 +1612,18 @@ export class CheatingDaddyApp extends LitElement {
             sales: t('profile.sales'),
         };
 
-        const sttBadge =
-            {
-                cloud: { label: 'CLOUD', glyph: '☁', title: 'STT: Deepgram nova-3 (cloud)' },
-                hybrid: { label: 'HYBRID', glyph: '⚡', title: 'STT: Deepgram + reserved local lane' },
-                local: { label: 'LOCAL', glyph: '🔒', title: 'STT: Deepgram disabled (audio still flows to Gemini Live)' },
-            }[this.sttMode] || null;
+        // The badge must describe where audio actually goes. Trial / local
+        // (Ollama) never use Deepgram or Gemini Live — audio stays on this PC
+        // (Whisper) whatever sttMode says. sttMode only matters in byok, where
+        // the counterpart's audio always reaches Gemini Live.
+        const onDevice = this._sessionProviderMode === 'trial' || this._sessionProviderMode === 'local';
+        const sttBadgeKey = onDevice ? 'local' : this.sttMode;
+        const sttBadge = onDevice
+            ? { label: 'LOCAL', glyph: '🔒', title: t('app.live_bar.stt_badge.on_device') }
+            : {
+                  cloud: { label: 'CLOUD', glyph: '☁', title: t('app.live_bar.stt_badge.cloud') },
+                  local: { label: 'LOCAL', glyph: '🔒', title: t('app.live_bar.stt_badge.byok_local') },
+              }[this.sttMode] || null;
 
         return html`
             <div class="live-bar">
@@ -1334,9 +1640,11 @@ export class CheatingDaddyApp extends LitElement {
                 </div>
                 <div class="live-bar-center">${profileLabels[this.selectedProfile] || t('app.live_bar.session_fallback')}</div>
                 <div class="live-bar-right">
-                    ${sttBadge
-                        ? html`<span class="live-bar-badge stt-${this.sttMode}" title=${sttBadge.title}>${sttBadge.glyph} ${sttBadge.label}</span>`
-                        : ''}
+                    ${
+                        sttBadge
+                            ? html`<span class="live-bar-badge stt-${sttBadgeKey}" title=${sttBadge.title}>${sttBadge.glyph} ${sttBadge.label}</span>`
+                            : ''
+                    }
                     ${this.statusText ? html`<span class="live-bar-text">${this.statusText}</span>` : ''}
                     <span class="live-bar-text">${this.getElapsedTime()}</span>
                     ${this._isClickThrough ? html`<span class="live-bar-text">${t('app.live_bar.click_through')}</span>` : ''}
@@ -1389,6 +1697,7 @@ export class CheatingDaddyApp extends LitElement {
                     <div class="content-inner ${isLive ? 'live' : ''}">${this.renderCurrentView()}</div>
                 </div>
             </div>
+            ${this._renderRecordingConsent()} ${this._renderExperimentalMode()}
         `;
     }
 }

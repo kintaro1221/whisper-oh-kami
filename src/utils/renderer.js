@@ -198,7 +198,7 @@ function arrayBufferToBase64(buffer) {
 }
 
 // ── Deepgram-only mic pipeline: 48kHz capture → AudioWorklet 3:1 decimation → 16kHz Int16
-// (Mirrors sokuroku's DownsampleProcessor; integer ratio avoids aliasing.)
+// (Mirrors the internal STT client's DownsampleProcessor; integer ratio avoids aliasing.)
 // Worklet code lives at src/assets/deepgram-downsample-worklet.js — using a real file
 // because the renderer CSP ("script-src 'self' 'unsafe-inline'") rejects blob: URLs,
 // which silently breaks AudioWorklet.addModule().
@@ -381,7 +381,7 @@ async function initializeLocal(profile = 'sales') {
     const prefs = await storage.getPreferences();
     const ollamaHost = prefs.ollamaHost || 'http://127.0.0.1:11434';
     const ollamaModel = prefs.ollamaModel || 'gemma3:4b';
-    const whisperModel = prefs.whisperModel || 'Xenova/whisper-tiny';
+    const whisperModel = prefs.whisperModel || 'Xenova/whisper-small';
     const customPrompt = buildSessionCustomPrompt(prefs);
 
     const result = await ipcRenderer.invoke('initialize-local', ollamaHost, ollamaModel, whisperModel, profile, customPrompt);
@@ -396,7 +396,7 @@ async function initializeLocal(profile = 'sales') {
 
 async function initializeTrial(profile = 'sales') {
     const prefs = await storage.getPreferences();
-    const whisperModel = prefs.whisperModel || 'Xenova/whisper-tiny';
+    const whisperModel = prefs.whisperModel || 'Xenova/whisper-small';
     const customPrompt = buildSessionCustomPrompt(prefs);
 
     const result = await ipcRenderer.invoke('initialize-trial', whisperModel, profile, customPrompt);
@@ -437,23 +437,47 @@ async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'mediu
     }
     const useExplicitLoopbackDevice = effectiveSystemDeviceId !== 'auto' && effectiveSystemDeviceId !== 'none';
 
-    // Start Deepgram-only mic pipeline (48kHz capture → 16kHz worklet, integer 3:1).
-    // Runs alongside the existing 24kHz Gemini pipe; mic is captured twice (different
-    // sample-rate streams) so neither pipeline degrades the other.
-    startDeepgramMicCapture(effectiveMicDeviceId);
-    // Phase 1g-3: also stand up an opponent-side Deepgram pipe when the user
-    // picked a concrete loopback device. 'auto' / 'none' fall through to the
-    // existing OS-specific paths and Gemini Live remains the opponent source.
-    startDeepgramSystemCapture(effectiveSystemDeviceId);
+    // Deepgram is a byok-only, opt-in (sttMode 'cloud') path. Legacy
+    // providerMode 'cloud' is treated as byok; anything else (trial / local)
+    // never touches Deepgram or the native helper.
+    let hasDeepgramKey = false;
+    try {
+        hasDeepgramKey = !!(await ipcRenderer.invoke('has-deepgram-key'));
+    } catch (err) {
+        console.warn('[audio-capture] has-deepgram-key failed:', err && err.message);
+    }
+    const helperPrefs = {
+        providerMode: preferencesCache.providerMode === 'cloud' ? 'byok' : preferencesCache.providerMode || 'trial',
+        sttMode: preferencesCache.sttMode || 'local',
+        hasDeepgramKey,
+        systemDeviceId: effectiveSystemDeviceId,
+        audioMode,
+    };
+    const deepgramCaptureEnabled = helperPrefs.providerMode === 'byok' && helperPrefs.sttMode === 'cloud';
 
-    // Phase 1g-3.7 UX follow-up: auto-start the native WASAPI helper when the
-    // user left system audio on 'auto'. Without this the helper had to be
-    // poked from DevTools (window.devStartAudioCapture()), which silently
-    // broke opponent transcription for anyone running without devtools open.
+    if (deepgramCaptureEnabled) {
+        // Start Deepgram-only mic pipeline (48kHz capture → 16kHz worklet, integer 3:1).
+        // Runs alongside the existing 24kHz Gemini pipe; mic is captured twice (different
+        // sample-rate streams) so neither pipeline degrades the other.
+        startDeepgramMicCapture(effectiveMicDeviceId);
+        // Phase 1g-3: also stand up an opponent-side Deepgram pipe when the user
+        // picked a concrete loopback device. 'auto' / 'none' fall through to the
+        // existing OS-specific paths and Gemini Live remains the opponent source.
+        startDeepgramSystemCapture(effectiveSystemDeviceId);
+    }
+
+    // The native WASAPI helper only feeds Deepgram's system-side stream, so it
+    // is started only when that stream is actually wanted (byok + sttMode
+    // 'cloud' + Deepgram key + system audio on 'auto'). Gemini Live and local
+    // Whisper get system audio from the getDisplayMedia loopback below.
     // Explicit loopback selections are skipped on purpose — those use the
     // renderer-side AudioWorklet, and the helper's system-capture-suspend
-    // IPC would tear that down.
-    if (effectiveSystemDeviceId === 'auto' && audioMode !== 'mic_only') {
+    // IPC would tear that down. See src/utils/audioHelperPolicy.js.
+    // A missing policy script (load-order regression) is treated as "helper
+    // not needed" rather than throwing and aborting the whole capture start.
+    const helperPolicy = window.audioHelperPolicy;
+    if (!helperPolicy) console.warn('[audio-capture] audioHelperPolicy missing; native helper not started');
+    if (helperPolicy && helperPolicy.shouldStartAudioHelper(helperPrefs)) {
         ipcRenderer
             .invoke('start-audio-capture')
             .then(result => {
@@ -865,6 +889,9 @@ async function captureScreenshot(imageQuality = 'medium', isManual = false) {
 
                 if (result.success) {
                     console.log(`Image sent successfully (${offscreenCanvas.width}x${offscreenCanvas.height})`);
+                } else if (result.error === 'session_closed') {
+                    // Expected when a capture lands after the session was stopped.
+                    console.log('Image dropped: session already closed');
                 } else {
                     console.error('Failed to send image:', result.error);
                 }
@@ -972,6 +999,10 @@ async function captureManualScreenshot(imageQuality = null) {
                 if (result.success) {
                     console.log(`Image response completed from ${result.model}`);
                     // Response already displayed via streaming events (new-response/update-response)
+                } else if (result.error === 'session_closed') {
+                    // The session was stopped while the screenshot was in
+                    // flight — nothing to show the user.
+                    console.log('Image response dropped: session already closed');
                 } else {
                     console.error('Failed to get image response:', result.error);
                     whisperOhKami.addNewResponse(`Error: ${result.error}`);
@@ -1403,6 +1434,11 @@ const whisperOhKami = {
 
     // Local-only support export
     exportSupportDiagnostics,
+
+    // Discovery evidence manual actions (v0.7.5): only the user can promote an
+    // element to "confirmed"; retract clears the element back to empty.
+    confirmEvidence: key => ipcRenderer.invoke('discovery-evidence-confirm', key),
+    retractEvidence: key => ipcRenderer.invoke('discovery-evidence-retract', key),
 
     // Platform detection
     isLinux: isLinux,

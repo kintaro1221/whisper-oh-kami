@@ -1,4 +1,4 @@
-// daddy-audio-capture: Phase 1g-3.7 native helper for cheating-daddy.
+// daddy-audio-capture: Phase 1g-3.7 native helper for WhisperOhKAMI.
 //
 // Captures the Windows default render endpoint via WASAPI loopback, downmixes
 // the device-native stereo float stream to mono, resamples to 16 kHz with
@@ -56,7 +56,7 @@ const CAPTURE_EVENT_TIMEOUT_MS: u32 = 500;
 #[command(
     name = "daddy-audio-capture",
     version,
-    about = "Bundled WASAPI loopback helper for cheating-daddy (Phase 1g-3.7)"
+    about = "Bundled WASAPI loopback helper for WhisperOhKAMI (Phase 1g-3.7)"
 )]
 struct Cli {
     /// Output sample rate (Hz). Currently only 16000 is supported; other
@@ -85,7 +85,7 @@ struct Cli {
 
     /// Parent process PID. Helper exits cleanly if this process is no
     /// longer alive (1 s polling). Required for orphan recovery so a
-    /// crashed Daddy doesn't leave a streaming child behind.
+    /// crashed host app doesn't leave a streaming child behind.
     #[arg(long)]
     owner_pid: Option<u32>,
 }
@@ -108,7 +108,7 @@ fn jlog(level: &str, msg: &str, fields: serde_json::Value) {
 
 /// Returns true if the given Windows pid is currently a live process. Used
 /// for orphan recovery: we poll once per second and exit cleanly when the
-/// owner (cheating-daddy main) is gone.
+/// owner (the WhisperOhKAMI main process) is gone.
 fn is_pid_alive(pid: u32) -> bool {
     unsafe {
         let handle = match OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {

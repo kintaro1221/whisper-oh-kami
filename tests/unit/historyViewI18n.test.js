@@ -81,8 +81,8 @@ describe('HistoryView i18n extraction', () => {
         });
     });
 
-    // ── codex P2: feedback タブラベルも i18n 化（取りこぼし回帰防止）──
-    describe('codex P2: feedback tab label is i18n', () => {
+    // ── feedback タブラベルも i18n 化（取りこぼし回帰防止）──
+    describe('feedback tab label is i18n', () => {
         test('ja.js has history.tab.feedback', () => {
             expect(ja).toMatch(/'history\.tab\.feedback'/);
         });

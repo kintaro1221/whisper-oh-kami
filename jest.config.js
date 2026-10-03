@@ -1,4 +1,4 @@
-// Jest configuration for cheating-daddy
+// Jest configuration for WhisperOhKAMI
 //
 // Phase 1g-3.8 Now: minimal Jest infra. Targets the existing standalone
 // modules (deepgram.js, audioCapture.js) only. Renderer / Electron / Gemini

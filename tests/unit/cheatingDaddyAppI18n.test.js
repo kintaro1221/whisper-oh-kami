@@ -8,6 +8,7 @@ const read = relPath => fs.readFileSync(path.join(repoRoot, relPath), 'utf8');
 
 describe('CheatingDaddyApp i18n extraction (ja-only)', () => {
     const ja = read('src/i18n/ja.js');
+    const en = read('src/i18n/en.js');
     const app = read('src/components/app/CheatingDaddyApp.js');
 
     // ── ja.js contains all new keys ──
@@ -39,9 +40,36 @@ describe('CheatingDaddyApp i18n extraction (ja-only)', () => {
         expect(ja).toMatch(/'app\.window_control\.close_tooltip'/);
     });
 
+    test('ja.js contains app.recording_consent.accept', () => {
+        expect(ja).toMatch(/'app\.recording_consent\.accept'/);
+    });
+
+    test('ja.js contains app.recording_consent.cancel', () => {
+        expect(ja).toMatch(/'app\.recording_consent\.cancel'/);
+    });
+
+    test('en.js contains app.recording_consent.accept and .cancel (button labels are bilingual)', () => {
+        expect(en).toMatch(/'app\.recording_consent\.accept'/);
+        expect(en).toMatch(/'app\.recording_consent\.cancel'/);
+    });
+
     // ── CheatingDaddyApp.js uses t() for new keys ──
     test("CheatingDaddyApp.js uses t('app.recording_consent.message')", () => {
         expect(app).toMatch(/t\('app\.recording_consent\.message'\)/);
+    });
+
+    test("CheatingDaddyApp.js uses t('app.recording_consent.accept') and t('app.recording_consent.cancel')", () => {
+        expect(app).toMatch(/t\('app\.recording_consent\.accept'\)/);
+        expect(app).toMatch(/t\('app\.recording_consent\.cancel'\)/);
+    });
+
+    // ── Regression guard: window.confirm() must never come back as the
+    // recording-consent gate — it renders as an off-screen, unusable dialog
+    // in the packaged transparent/frameless window and freezes the
+    // renderer. The gate must be the in-app modal / RecordingConsentGate. ──
+    test('CheatingDaddyApp.js no longer calls window.confirm() (mentions in comments are fine)', () => {
+        expect(app).not.toMatch(/return\s+window\.confirm\(/);
+        expect(app).not.toMatch(/typeof window\.confirm === 'function'/);
     });
 
     test("CheatingDaddyApp.js uses t('app.live_bar.end_session')", () => {

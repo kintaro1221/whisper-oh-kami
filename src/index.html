@@ -184,7 +184,10 @@
                    - palt: 半角括弧・句読点の前後余白を詰める (proportional alternate width)
                    - tnum: 数字を等幅に (tabular numerals)、X / 5 等のカウンタが揃う
                    - kern: 自動 kerning 有効化 */
-                font-feature-settings: 'palt' 1, 'tnum' 1, 'kern' 1;
+                font-feature-settings:
+                    'palt' 1,
+                    'tnum' 1,
+                    'kern' 1;
                 text-rendering: optimizeLegibility;
             }
 
@@ -229,10 +232,11 @@
         <script src="utils/evidenceInspector.js"></script>
         <script src="utils/discoveryPhase.js"></script>
         <script src="utils/whisperBarState.js"></script>
+        <script src="utils/recordingConsentGate.js"></script>
+        <script src="utils/audioHelperPolicy.js"></script>
         <script type="module" src="components/app/CheatingDaddyApp.js"></script>
 
         <whisper-oh-kami-app></whisper-oh-kami-app>
-        <script src="script.js"></script>
         <script src="utils/renderer.js"></script>
     </body>
 </html>

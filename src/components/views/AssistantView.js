@@ -595,7 +595,7 @@ export class AssistantView extends LitElement {
 
         /* State-transition pulse is driven JS-side via Web Animations API
            (_pulseBadge), so the pulse re-fires reliably even on rapid
-           empty→partial→filled successions within the same animation window.
+           empty→partial→detected successions within the same animation window.
            prefers-reduced-motion is honored inside _pulseBadge (no JS-side
            start when reduced-motion is set). */
 
@@ -642,8 +642,16 @@ export class AssistantView extends LitElement {
             color: var(--text-primary);
         }
 
-        .dp-badge.dp-status-filled {
-            /* filled (✓) — accent (navy) 強調、白文字 */
+        .dp-badge.dp-status-detected {
+            /* detected (◐) — 自動検出の候補。accent と同じ色相だが塗らずに枠線のみ
+               (相手にまだ確認していないので「確認済み」と見分けがつくように) */
+            border-color: var(--accent);
+            border-style: dashed;
+            color: var(--accent);
+        }
+
+        .dp-badge.dp-status-confirmed {
+            /* confirmed (✓) — ユーザーが相手に確認済み。accent (navy) 塗り、白文字 */
             background: var(--accent);
             border-color: var(--accent);
             color: #ffffff;
@@ -706,9 +714,49 @@ export class AssistantView extends LitElement {
             border-color: var(--warning);
         }
 
-        .evidence-panel-status-filled {
+        .evidence-panel-status-detected {
+            color: var(--accent);
+            border-color: var(--accent);
+            border-style: dashed;
+        }
+
+        .evidence-panel-status-confirmed {
             color: var(--success);
             border-color: var(--success);
+        }
+
+        .evidence-panel-action {
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: var(--font-size-xs);
+            line-height: 1.4;
+            padding: 1px 8px;
+            transition:
+                color var(--transition),
+                background var(--transition),
+                border-color var(--transition);
+        }
+
+        .evidence-panel-action:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .evidence-panel-action:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 1px;
+        }
+
+        .evidence-confirm {
+            border-color: var(--success);
+            color: var(--success);
+        }
+
+        .evidence-retract {
+            color: var(--text-muted);
         }
 
         .evidence-panel-close {
@@ -787,6 +835,29 @@ export class AssistantView extends LitElement {
         .evidence-row-self {
             border-left-color: var(--warning);
             opacity: 0.75;
+        }
+
+        .evidence-row-retracted {
+            opacity: 0.55;
+        }
+
+        .evidence-row-retracted .evidence-quote {
+            text-decoration: line-through;
+            color: var(--text-muted);
+        }
+
+        .evidence-tag {
+            display: inline-block;
+            padding: 0 5px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            line-height: 1.4;
+            color: var(--text-secondary);
+        }
+
+        .evidence-tag-retracted {
+            border-style: dashed;
         }
 
         .discovery-phase-badge {
@@ -1322,7 +1393,7 @@ export class AssistantView extends LitElement {
             this.expandedElement = null;
         }
 
-        // Detect 5要素 status upgrades (empty→partial, partial→filled, etc.)
+        // Detect 5要素 status upgrades (empty→partial, partial→detected, detected→confirmed, etc.)
         // and fire a one-shot outline pulse on each affected badge via Web
         // Animations API. Downgrades and no-ops are skipped. Using
         // element.animate() instead of a CSS class lets rapid consecutive
@@ -1333,7 +1404,7 @@ export class AssistantView extends LitElement {
             const curr = this.discoveryEvidence;
             if (prev && curr && curr.elements) {
                 const order = ['pain', 'kpi', 'authority', 'budget', 'timeline'];
-                const rank = { empty: 0, partial: 1, filled: 2 };
+                const rank = { empty: 0, partial: 1, detected: 2, confirmed: 3 };
                 for (const key of order) {
                     const oldStatus = prev.elements?.[key]?.status || 'empty';
                     const newStatus = curr.elements?.[key]?.status || 'empty';
@@ -1372,21 +1443,36 @@ export class AssistantView extends LitElement {
         const labels = this._discoveryElementLabels();
         const order = ['pain', 'kpi', 'authority', 'budget', 'timeline'];
         const ev = this.discoveryEvidence;
-        const total = ev?.totalScore ?? 0;
+        // totalScore = detected + confirmed; confirmedCount = only elements the
+        // user confirmed with the customer. The header shows the two disjoint
+        // groups: candidates still unconfirmed, and confirmed.
+        const confirmed = ev?.confirmedCount ?? 0;
+        const candidates = Math.max(0, (ev?.totalScore ?? 0) - confirmed);
+        const counts = t('assistant.progress.counts').replace('{detected}', candidates).replace('{confirmed}', confirmed);
+        const inspector = (typeof window !== 'undefined' && window.evidenceInspector) || null;
         return html`
             <div class="discovery-progress">
-                <span class="discovery-progress-title">${t('assistant.progress.title')} <span class="discovery-progress-count">${total} / 5</span></span>
+                <span class="discovery-progress-title">${t('assistant.progress.title')} <span class="discovery-progress-count">${counts}</span></span>
                 ${this._renderDiscoveryPhaseBadge()}
                 <div class="discovery-progress-badges">
                     ${order.map(key => {
                         const el = ev?.elements?.[key];
                         const status = el?.status || 'empty';
-                        const lastQuote = el?.evidence?.length ? el.evidence[el.evidence.length - 1].text : '';
-                        const icon = status === 'filled' ? '✓' : status === 'partial' ? '●' : '';
+                        // Retracted rows (and the user's retraction marker) are history, not
+                        // the current value — the tooltip shows the newest live quote only.
+                        const live = el?.evidence ? el.evidence.filter(e => !e.retracted) : [];
+                        const lastQuote = live.length ? live[live.length - 1].text : '';
+                        const icon = status === 'confirmed' ? '✓' : status === 'detected' ? '◐' : status === 'partial' ? '●' : '';
                         const isExpanded = this.expandedElement === key;
-                        const unconfirmed = t('assistant.evidence.unconfirmed');
-                        const tooltip = lastQuote || `${labels[key]}: ${unconfirmed}`;
-                        const ariaLabel = lastQuote ? `${labels[key]}: ${lastQuote}` : `${labels[key]}: ${unconfirmed}`;
+                        const statusText =
+                            status === 'empty' || !inspector
+                                ? t('assistant.evidence.unconfirmed')
+                                : inspector.getElementMeta(key).statusLabel(status);
+                        const tooltip =
+                            status === 'detected'
+                                ? `${lastQuote || `${labels[key]}: ${statusText}`} — ${t('assistant.badge.detected_hint')}`
+                                : lastQuote || `${labels[key]}: ${statusText}`;
+                        const ariaLabel = lastQuote ? `${labels[key]}: ${statusText}: ${lastQuote}` : `${labels[key]}: ${statusText}`;
                         return html`
                             <button
                                 type="button"
@@ -1398,9 +1484,11 @@ export class AssistantView extends LitElement {
                                 @click=${() => this._handleBadgeClick(key)}
                             >
                                 <span class="dp-badge-label">${labels[key]}</span>
-                                ${status === 'empty' && el?.selfMentions?.length > 0
-                                    ? html`<span class="dp-badge-self-dot" title="${t('assistant.badge.self_mention_hint')}"></span>`
-                                    : ''}
+                                ${
+                                    status === 'empty' && el?.selfMentions?.length > 0
+                                        ? html`<span class="dp-badge-self-dot" title="${t('assistant.badge.self_mention_hint')}"></span>`
+                                        : ''
+                                }
                                 ${icon ? html`<span class="dp-badge-icon">${icon}</span>` : ''}
                             </button>
                         `;
@@ -1433,6 +1521,20 @@ export class AssistantView extends LitElement {
                 <div class="evidence-panel-head">
                     <span class="evidence-panel-title">${meta.label}</span>
                     <span class="evidence-panel-status evidence-panel-status-${status}">${meta.statusLabel(status)}</span>
+                    ${
+                        status === 'detected' || status === 'partial'
+                            ? html`<button type="button" class="evidence-panel-action evidence-confirm" @click=${() => this._confirmEvidence(key)}>
+                                  ✓ ${t('assistant.evidence.confirm')}
+                              </button>`
+                            : ''
+                    }
+                    ${
+                        status !== 'empty'
+                            ? html`<button type="button" class="evidence-panel-action evidence-retract" @click=${() => this._retractEvidence(key)}>
+                                  ${t('assistant.evidence.retract')}
+                              </button>`
+                            : ''
+                    }
                     <button
                         type="button"
                         class="evidence-panel-close"
@@ -1443,43 +1545,64 @@ export class AssistantView extends LitElement {
                         ×
                     </button>
                 </div>
-                ${evidenceList.length === 0
-                    ? html`<div class="evidence-empty">${t('assistant.evidence.empty')}</div>`
-                    : html`
-                          <ul class="evidence-list">
-                              ${evidenceList.map(e => {
-                                  const sourceMeta = getSourceMeta(e.source);
-                                  return html`
-                                      <li class="evidence-row">
-                                          <div class="evidence-quote">${e.text}</div>
-                                          <div class="evidence-meta">
-                                              <span class="evidence-source">${sourceMeta.icon} ${sourceMeta.label}</span>
-                                              <span class="evidence-time">${formatRelativeTime(e.timestamp, now)}</span>
-                                          </div>
-                                      </li>
-                                  `;
-                              })}
-                          </ul>
-                      `}
-                ${selfMentionsList.length > 0
-                    ? html`
-                          <div class="evidence-self-section">
-                              <div class="evidence-self-section-title">${t('assistant.evidence.self_mentions_section')}</div>
+                ${
+                    evidenceList.length === 0
+                        ? html`<div class="evidence-empty">${t('assistant.evidence.empty')}</div>`
+                        : html`
                               <ul class="evidence-list">
-                                  ${selfMentionsList.map(
-                                      e => html`
-                                          <li class="evidence-row evidence-row-self">
-                                              <div class="evidence-quote">${e.text}</div>
+                                  ${evidenceList.map(e => {
+                                      const sourceMeta = getSourceMeta(e.source);
+                                      // A manual retraction is logged as a user-sourced marker row
+                                      // (text '[manual]'); show it as an action, not as a quote.
+                                      const isUserMarker = e.source === 'user';
+                                      return html`
+                                          <li class="evidence-row ${e.retracted ? 'evidence-row-retracted' : ''}">
+                                              ${isUserMarker ? '' : html`<div class="evidence-quote">${e.text}</div>`}
                                               <div class="evidence-meta">
+                                                  <span class="evidence-source">${sourceMeta.icon} ${sourceMeta.label}</span>
+                                                  ${
+                                                      e.polarity
+                                                          ? html`<span class="evidence-tag evidence-tag-polarity"
+                                                                >${t('assistant.evidence.polarity.' + e.polarity)}</span
+                                                            >`
+                                                          : ''
+                                                  }
+                                                  ${
+                                                      e.retracted && !isUserMarker
+                                                          ? html`<span class="evidence-tag evidence-tag-retracted"
+                                                                >${t('assistant.evidence.retracted')}</span
+                                                            >`
+                                                          : ''
+                                                  }
                                                   <span class="evidence-time">${formatRelativeTime(e.timestamp, now)}</span>
                                               </div>
                                           </li>
-                                      `
-                                  )}
+                                      `;
+                                  })}
                               </ul>
-                          </div>
-                      `
-                    : ''}
+                          `
+                }
+                ${
+                    selfMentionsList.length > 0
+                        ? html`
+                              <div class="evidence-self-section">
+                                  <div class="evidence-self-section-title">${t('assistant.evidence.self_mentions_section')}</div>
+                                  <ul class="evidence-list">
+                                      ${selfMentionsList.map(
+                                          e => html`
+                                              <li class="evidence-row evidence-row-self">
+                                                  <div class="evidence-quote">${e.text}</div>
+                                                  <div class="evidence-meta">
+                                                      <span class="evidence-time">${formatRelativeTime(e.timestamp, now)}</span>
+                                                  </div>
+                                              </li>
+                                          `
+                                      )}
+                                  </ul>
+                              </div>
+                          `
+                        : ''
+                }
             </div>
         `;
     }
@@ -1498,6 +1621,25 @@ export class AssistantView extends LitElement {
 
     _handleBadgeClick(key) {
         this.expandedElement = this.expandedElement === key ? null : key;
+    }
+
+    // Manual evidence actions. The main process applies them to the store and
+    // pushes the new state back on 'discovery-evidence-update', so the view
+    // does not mutate discoveryEvidence locally.
+    async _confirmEvidence(key) {
+        try {
+            await window.whisperOhKami?.confirmEvidence?.(key);
+        } catch (error) {
+            console.error('Failed to confirm discovery evidence:', error);
+        }
+    }
+
+    async _retractEvidence(key) {
+        try {
+            await window.whisperOhKami?.retractEvidence?.(key);
+        } catch (error) {
+            console.error('Failed to retract discovery evidence:', error);
+        }
     }
 
     // One-shot outline pulse for a dp-badge after a status upgrade.
@@ -1547,12 +1689,16 @@ export class AssistantView extends LitElement {
     _getDiscoveryGaps() {
         const labels = this._discoveryElementLabels();
         const order = ['pain', 'kpi', 'authority', 'budget', 'timeline'];
-        return order
-            .map(key => {
-                const status = this.discoveryEvidence?.elements?.[key]?.status || 'empty';
-                return { key, label: labels[key], status };
-            })
-            .filter(item => item.status !== 'filled');
+        return (
+            order
+                .map(key => {
+                    const status = this.discoveryEvidence?.elements?.[key]?.status || 'empty';
+                    return { key, label: labels[key], status };
+                })
+                // Not a gap once there is at least a detected candidate; confirmation
+                // is shown on the badge, the rail only lists what is still missing.
+                .filter(item => item.status !== 'detected' && item.status !== 'confirmed')
+        );
     }
 
     _getRailHelpText() {
@@ -1564,7 +1710,12 @@ export class AssistantView extends LitElement {
             if (gaps.length) {
                 return `${gaps[0].label}${t('assistant.help.discovery_gap')}`;
             }
-            return t('assistant.help.discovery_complete');
+            // No gaps only means every element has at least a candidate. Say
+            // "confirmed" only when the user has confirmed all five.
+            if (this.discoveryEvidence?.confirmedCount === 5) {
+                return t('assistant.help.discovery_complete');
+            }
+            return t('assistant.help.candidates_complete');
         }
         return t('assistant.help.default');
     }
@@ -1612,16 +1763,18 @@ export class AssistantView extends LitElement {
         return html`
             <section class="rail-section">
                 <h3 class="rail-title">${t('assistant.rail.context_title')}</h3>
-                ${fields.length
-                    ? fields.slice(0, 5).map(
-                          field => html`
-                              <div class="rail-context-row">
-                                  <span class="rail-context-key">${field.label}</span>
-                                  <span class="rail-context-value">${field.value}</span>
-                              </div>
-                          `
-                      )
-                    : html`<div class="rail-muted">${t('assistant.rail.context_empty')}</div>`}
+                ${
+                    fields.length
+                        ? fields.slice(0, 5).map(
+                              field => html`
+                                  <div class="rail-context-row">
+                                      <span class="rail-context-key">${field.label}</span>
+                                      <span class="rail-context-value">${field.value}</span>
+                                  </div>
+                              `
+                          )
+                        : html`<div class="rail-muted">${t('assistant.rail.context_empty')}</div>`
+                }
             </section>
         `;
     }
@@ -1640,13 +1793,15 @@ export class AssistantView extends LitElement {
         return html`
             <section class="rail-section">
                 <h3 class="rail-title">${t('assistant.rail.gaps_title')}</h3>
-                ${gaps.length
-                    ? html`
-                          <div class="rail-chip-row">
-                              ${gaps.map(gap => html`<span class="rail-chip ${gap.status === 'partial' ? 'partial' : ''}">${gap.label}</span>`)}
-                          </div>
-                      `
-                    : html`<div class="rail-muted">${t('assistant.rail.gaps_filled')}</div>`}
+                ${
+                    gaps.length
+                        ? html`
+                              <div class="rail-chip-row">
+                                  ${gaps.map(gap => html`<span class="rail-chip ${gap.status === 'partial' ? 'partial' : ''}">${gap.label}</span>`)}
+                              </div>
+                          `
+                        : html`<div class="rail-muted">${t('assistant.rail.gaps_filled')}</div>`
+                }
             </section>
         `;
     }
@@ -1666,9 +1821,15 @@ export class AssistantView extends LitElement {
             <section class="rail-section">
                 <h3 class="rail-title">${t('assistant.rail.feedback_title')}</h3>
                 <div class="feedback-actions">
-                    <button class="feedback-btn" ?disabled=${disabled} @click=${() => this._saveFeedback('helpful')}>${t('feedback.rating.helpful')}</button>
-                    <button class="feedback-btn" ?disabled=${disabled} @click=${() => this._saveFeedback('off_target')}>${t('feedback.rating.off_target')}</button>
-                    <button class="feedback-btn" ?disabled=${disabled} @click=${() => this._saveFeedback('unsafe_or_risky')}>${t('feedback.rating.unsafe')}</button>
+                    <button class="feedback-btn" ?disabled=${disabled} @click=${() => this._saveFeedback('helpful')}>
+                        ${t('feedback.rating.helpful')}
+                    </button>
+                    <button class="feedback-btn" ?disabled=${disabled} @click=${() => this._saveFeedback('off_target')}>
+                        ${t('feedback.rating.off_target')}
+                    </button>
+                    <button class="feedback-btn" ?disabled=${disabled} @click=${() => this._saveFeedback('unsafe_or_risky')}>
+                        ${t('feedback.rating.unsafe')}
+                    </button>
                 </div>
                 <textarea
                     class="feedback-note"
@@ -1699,56 +1860,62 @@ export class AssistantView extends LitElement {
             <div class="workbench">
                 <div class="workbench-main">
                     <div class="transcription-panel">
-                        ${this.transcriptionSegments.length === 0 && !this.interimText
-                            ? html`<div class="transcription-empty">${t('assistant.empty.waiting_audio')}</div>`
-                            : html`
-                                  ${this.transcriptionSegments.map(
-                                      seg => html`
-                                          <div class="transcription-segment ${seg.type === 'output' ? 'output' : 'speaker-' + (seg.speakerId || 1)}">
-                                              ${seg.text}
-                                          </div>
-                                      `
-                                  )}
-                                  ${this.interimText ? html`<div class="transcription-interim">${this.interimText}</div>` : ''}
-                              `}
+                        ${
+                            this.transcriptionSegments.length === 0 && !this.interimText
+                                ? html`<div class="transcription-empty">${t('assistant.empty.waiting_audio')}</div>`
+                                : html`
+                                      ${this.transcriptionSegments.map(
+                                          seg => html`
+                                              <div
+                                                  class="transcription-segment ${seg.type === 'output' ? 'output' : 'speaker-' + (seg.speakerId || 1)}"
+                                              >
+                                                  ${seg.text}
+                                              </div>
+                                          `
+                                      )}
+                                      ${this.interimText ? html`<div class="transcription-interim">${this.interimText}</div>` : ''}
+                                  `
+                        }
                     </div>
                     <div class="response-container" id="responseContainer"></div>
 
-                    ${hasMultipleResponses
-                        ? html`
-                              <div class="response-nav">
-                                  <button
-                                      class="nav-btn"
-                                      @click=${this.navigateToPreviousResponse}
-                                      ?disabled=${this.currentResponseIndex <= 0}
-                                      title=${t('assistant.tooltip.previous_response')}
-                                  >
-                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                          <path
-                                              fill-rule="evenodd"
-                                              d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z"
-                                              clip-rule="evenodd"
-                                          />
-                                      </svg>
-                                  </button>
-                                  <span class="response-counter">${this.currentResponseIndex + 1} / ${this.responses.length}</span>
-                                  <button
-                                      class="nav-btn"
-                                      @click=${this.navigateToNextResponse}
-                                      ?disabled=${this.currentResponseIndex >= this.responses.length - 1}
-                                      title=${t('assistant.tooltip.next_response')}
-                                  >
-                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                          <path
-                                              fill-rule="evenodd"
-                                              d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z"
-                                              clip-rule="evenodd"
-                                          />
-                                      </svg>
-                                  </button>
-                              </div>
-                          `
-                        : ''}
+                    ${
+                        hasMultipleResponses
+                            ? html`
+                                  <div class="response-nav">
+                                      <button
+                                          class="nav-btn"
+                                          @click=${this.navigateToPreviousResponse}
+                                          ?disabled=${this.currentResponseIndex <= 0}
+                                          title=${t('assistant.tooltip.previous_response')}
+                                      >
+                                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                              <path
+                                                  fill-rule="evenodd"
+                                                  d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z"
+                                                  clip-rule="evenodd"
+                                              />
+                                          </svg>
+                                      </button>
+                                      <span class="response-counter">${this.currentResponseIndex + 1} / ${this.responses.length}</span>
+                                      <button
+                                          class="nav-btn"
+                                          @click=${this.navigateToNextResponse}
+                                          ?disabled=${this.currentResponseIndex >= this.responses.length - 1}
+                                          title=${t('assistant.tooltip.next_response')}
+                                      >
+                                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                              <path
+                                                  fill-rule="evenodd"
+                                                  d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z"
+                                                  clip-rule="evenodd"
+                                              />
+                                          </svg>
+                                      </button>
+                                  </div>
+                              `
+                            : ''
+                    }
 
                     <div class="input-bar">
                         <div class="input-bar-inner">

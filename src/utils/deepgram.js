@@ -1,6 +1,6 @@
 // Lightweight Deepgram WebSocket client for real-time STT.
-// Ported from C:\my-fs-pj\sokuroku\src\main\deepgram.ts (CommonJS / JS).
-// Adds 24kHz Int16 PCM resampling helper since cheating-daddy captures at 24kHz
+// Ported from an internal STT client implementation (TypeScript → CommonJS / JS).
+// Adds 24kHz Int16 PCM resampling helper since the app captures at 24kHz
 // while Deepgram is connected at 16kHz for nova-3 (Japanese).
 
 const WebSocket = require('ws');
@@ -75,6 +75,14 @@ class DeepgramService {
             this.retryTimer = null;
         }
         this._pushEvent('disconnect_called');
+        // Detach the session callbacks BEFORE closing the socket, so a final
+        // transcript (or error) arriving during the close handshake cannot
+        // reach the closed session's pushTurnEvent / status handlers. The
+        // 'disconnected' notification below still goes to the captured
+        // handler exactly once.
+        const onStatus = this.onStatus;
+        this.onTranscript = null;
+        this.onStatus = null;
         if (this.ws) {
             try {
                 this.ws.send(new Uint8Array(0));
@@ -85,7 +93,7 @@ class DeepgramService {
             this.ws = null;
         }
         this.lastDisconnectAt = Date.now();
-        if (this.onStatus) this.onStatus('disconnected');
+        if (onStatus) onStatus('disconnected');
     }
 
     _pushEvent(kind, detail) {

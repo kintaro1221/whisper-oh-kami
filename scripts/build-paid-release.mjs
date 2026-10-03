@@ -14,7 +14,9 @@
 //     ├── THIRD_PARTY_NOTICES.md        (copy of repo root notices)
 //     ├── guide.md                      (Windows install guide for the buyer)
 //     ├── build-instructions.md         (build-from-source for the buyer)
-//     ├── manifest.json                 (key-sorted, item-sorted)
+//     ├── manifest.json                 (key-sorted, item-sorted; also carries
+//     │                                  installerBuiltFromSha /
+//     │                                  installerBuiltAtUtc — see below)
 //     └── manifest.json.sha256          (operator pastes into D1.manifest_sha256)
 //
 // Determinism guarantees (audited by paidReleaseBundle.test.js):
@@ -26,6 +28,10 @@
 //   * `expectedAuthenticodeState` is the literal string `unsigned-beta`; the
 //     operator must change this to `signed` only after wiring up a real
 //     Authenticode signing pipeline.
+//   * `installerBuiltFromSha` / `installerBuiltAtUtc` come from
+//     out/build-info.json (written by forge.config.js's `hooks.postMake` at
+//     `npm run make` time) and prove --installer was actually built from the
+//     current HEAD — see the build_info_* gates below.
 //
 // Fail-closed gates (stable error codes printed on stderr for the operator's
 // runbook to grep):
@@ -33,6 +39,30 @@
 //   * version_mismatch      — SemVer core differs from root package.json.
 //   * installer_missing     — --installer path is not a file.
 //   * unclean_tree          — git diff / git diff --cached is non-empty.
+//   * build_info_missing    — out/build-info.json does not exist. Run
+//     `npm run make` first (its postMake hook writes this file).
+//   * build_info_invalid    — out/build-info.json is not valid JSON, is
+//     missing a required field, or a field fails its schema check (commitSha
+//     is not 40 lowercase hex chars, version is not a non-empty string,
+//     builtAtUtc does not parse as a date, treeDirty is not a boolean,
+//     installerSha256 is not 64 lowercase hex chars, or installerSize is not
+//     a positive integer).
+//   * build_info_commit_mismatch — out/build-info.json's commitSha differs
+//     from the current HEAD. --installer was built from a different commit
+//     than the one source.zip is archived from (e.g. a commit landed between
+//     `npm run make` and `npm run paid-release`). Re-run `npm run make` at
+//     the release commit.
+//   * build_info_version_mismatch — out/build-info.json's version differs
+//     from root package.json's version.
+//   * build_info_installer_mismatch — the SHA-256/size actually measured on
+//     the `--installer` file differ from out/build-info.json's
+//     installerSha256/installerSize. Without this check, --installer accepts
+//     an arbitrary file path and nothing would stop packaging a file that was
+//     never the Setup.exe built at `npm run make` time. Re-run `npm run make`
+//     and point `--installer` at the fresh Setup.exe it produced.
+//   * build_info_tree_dirty — out/build-info.json recorded a dirty tracked
+//     tree at `npm run make` time. The installer may not match any commit at
+//     all; re-run `npm run make` on a clean tree.
 //   * notices_stale         — `npm run notices:check` exited non-zero.
 //   * output_exists         — out/paid-release/<version>/ already exists.
 //   * source_missing_required_entries — git archive of HEAD did not include
@@ -108,12 +138,23 @@ const REQUIRED_SOURCE_ENTRIES = [
 const EXCLUDED_SOURCE_PREFIXES = [
     'GATE1_PRE_MEETING.md',
     'AGENTS.md',
+    'CLAUDE.md',
+    '.claude/',
     'start.bat',
     'start-hidden.vbs',
     'docs/operations/',
     'docs/superpowers/',
     'docs/decisions/',
     'docs/legal/REVIEW-NOTES.md',
+    // Free-phase exclusions (2026-10-03): sales-only disclosures + internal
+    // legal index, and the tests that read export-ignored trees.
+    'docs/legal/tokushoho.md',
+    'docs/legal/terms-and-sales.md',
+    'docs/legal/README.md',
+    'tests/unit/paidBetaLpContract.test.js',
+    'tests/unit/paidCloudflareConfig.test.js',
+    'tests/unit/paidLegalContract.test.js',
+    'tests/unit/paidReleaseBundle.test.js',
     'lp/',
 ];
 
@@ -122,6 +163,15 @@ const EXCLUDED_SOURCE_GLOB_RE = /^HANDOFF_2026-05-.*\.md$/;
 
 const GUIDE_REL_PATH = 'docs/distribution/windows-install-guide.md';
 const BUILD_INSTRUCTIONS_REL_PATH = 'docs/distribution/build-from-source.md';
+const BUILD_INFO_REL_PATH = 'out/build-info.json';
+const BUILD_INFO_REQUIRED_FIELDS = ['commitSha', 'version', 'builtAtUtc', 'treeDirty', 'installerSha256', 'installerSize'];
+
+// commitSha: full 40-char lowercase hex git SHA-1.
+const COMMIT_SHA_RE = /^[0-9a-f]{40}$/;
+// installerSha256: lowercase hex SHA-256 digest (64 chars).
+const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+// Exact shape of Date.prototype.toISOString() output (what postMake writes).
+const ISO_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 const MANIFEST_FILENAME = 'manifest.json';
 const MANIFEST_SHA_FILENAME = 'manifest.json.sha256';
@@ -217,23 +267,14 @@ function parseArgs(argv) {
         } else if (flag === '--help' || flag === '-h') {
             out.help = true;
         } else {
-            fail(
-                'usage',
-                `Unknown argument: ${flag}\nUsage: node scripts/build-paid-release.mjs --version <semver> --installer <path>`
-            );
+            fail('usage', `Unknown argument: ${flag}\nUsage: node scripts/build-paid-release.mjs --version <semver> --installer <path>`);
         }
     }
     if (!out.version) {
-        fail(
-            'usage',
-            'Missing required --version flag.\nUsage: node scripts/build-paid-release.mjs --version <semver> --installer <path>'
-        );
+        fail('usage', 'Missing required --version flag.\nUsage: node scripts/build-paid-release.mjs --version <semver> --installer <path>');
     }
     if (!out.installer) {
-        fail(
-            'usage',
-            'Missing required --installer flag.\nUsage: node scripts/build-paid-release.mjs --version <semver> --installer <path>'
-        );
+        fail('usage', 'Missing required --installer flag.\nUsage: node scripts/build-paid-release.mjs --version <semver> --installer <path>');
     }
     return out;
 }
@@ -271,19 +312,16 @@ async function readRootPackageJson(repoRoot) {
 
 function assertCleanTree(repoRoot) {
     // `git diff --quiet` exits 0 if clean, 1 if dirty, 128 on error.
-    for (const flags of [['diff', '--quiet'], ['diff', '--cached', '--quiet']]) {
+    for (const flags of [
+        ['diff', '--quiet'],
+        ['diff', '--cached', '--quiet'],
+    ]) {
         const result = run('git', flags, { cwd: repoRoot });
         if (result.status === 0) continue;
         if (result.status === 1) {
-            fail(
-                'unclean_tree',
-                'Working tree or index has uncommitted changes. Commit or stash before releasing.'
-            );
+            fail('unclean_tree', 'Working tree or index has uncommitted changes. Commit or stash before releasing.');
         }
-        fail(
-            'unclean_tree',
-            `git ${flags.join(' ')} failed (status ${result.status}, signal ${result.signal}): ${result.stderr.trim()}`
-        );
+        fail('unclean_tree', `git ${flags.join(' ')} failed (status ${result.status}, signal ${result.signal}): ${result.stderr.trim()}`);
     }
 }
 
@@ -304,6 +342,129 @@ function getCommitIsoTimestamp(repoRoot) {
     return r.stdout.trim();
 }
 
+// ---------------------------------------------------------------------------
+// out/build-info.json: proves --installer was built from the commit whose
+// source.zip we are about to archive. Written by forge.config.js's
+// `hooks.postMake` at `npm run make` time; read-only here.
+// ---------------------------------------------------------------------------
+
+async function readBuildInfo(repoRoot) {
+    const buildInfoPath = path.join(repoRoot, BUILD_INFO_REL_PATH);
+    if (!existsSync(buildInfoPath)) {
+        fail(
+            'build_info_missing',
+            `${BUILD_INFO_REL_PATH} not found. Run "npm run make" first — its postMake ` +
+                'hook writes this file, and it is the only proof that --installer was ' +
+                'built from the current commit.'
+        );
+    }
+    let raw;
+    try {
+        raw = await readFile(buildInfoPath, 'utf8');
+    } catch (err) {
+        fail('build_info_missing', `Could not read ${BUILD_INFO_REL_PATH}: ${err.message}`);
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(raw);
+    } catch (err) {
+        fail('build_info_invalid', `${BUILD_INFO_REL_PATH} is not valid JSON: ${err.message}`);
+    }
+    for (const field of BUILD_INFO_REQUIRED_FIELDS) {
+        if (!(field in parsed)) {
+            fail('build_info_invalid', `${BUILD_INFO_REL_PATH} is missing required field "${field}".`);
+        }
+    }
+    // Schema validation beyond mere key presence: a field of the wrong type
+    // (e.g. treeDirty as the string "true") must not silently pass through
+    // to the semantic checks below, several of which only guard against the
+    // literal value `true` and would let a truthy-but-non-boolean value
+    // slip past.
+    if (typeof parsed.commitSha !== 'string' || !COMMIT_SHA_RE.test(parsed.commitSha)) {
+        fail('build_info_invalid', `${BUILD_INFO_REL_PATH} field "commitSha" must be a 40-character lowercase hex string.`);
+    }
+    if (typeof parsed.version !== 'string' || parsed.version.length === 0) {
+        fail('build_info_invalid', `${BUILD_INFO_REL_PATH} field "version" must be a non-empty string.`);
+    }
+    // Date.parse() alone is NOT ISO validation — it happily accepts
+    // "August 30, 2026", "08/30/2026", and "0". Require the exact UTC
+    // shape postMake writes (toISOString output) plus a round-trip so
+    // impossible dates like 2026-13-45 are rejected too.
+    const builtAtDate = typeof parsed.builtAtUtc === 'string' ? new Date(parsed.builtAtUtc) : null;
+    if (
+        typeof parsed.builtAtUtc !== 'string' ||
+        !ISO_UTC_RE.test(parsed.builtAtUtc) ||
+        Number.isNaN(builtAtDate.getTime()) ||
+        builtAtDate.toISOString() !== parsed.builtAtUtc
+    ) {
+        fail('build_info_invalid', `${BUILD_INFO_REL_PATH} field "builtAtUtc" must be a UTC ISO 8601 string of the form YYYY-MM-DDTHH:mm:ss.sssZ.`);
+    }
+    if (typeof parsed.treeDirty !== 'boolean') {
+        fail('build_info_invalid', `${BUILD_INFO_REL_PATH} field "treeDirty" must be a boolean.`);
+    }
+    if (typeof parsed.installerSha256 !== 'string' || !SHA256_HEX_RE.test(parsed.installerSha256)) {
+        fail('build_info_invalid', `${BUILD_INFO_REL_PATH} field "installerSha256" must be a 64-character lowercase hex string.`);
+    }
+    if (!Number.isInteger(parsed.installerSize) || parsed.installerSize <= 0) {
+        fail('build_info_invalid', `${BUILD_INFO_REL_PATH} field "installerSize" must be a positive integer.`);
+    }
+    return parsed;
+}
+
+function assertBuildInfoMatches(buildInfo, { commitSha, packageVersion }) {
+    if (buildInfo.commitSha !== commitSha) {
+        fail(
+            'build_info_commit_mismatch',
+            `${BUILD_INFO_REL_PATH} commitSha (${buildInfo.commitSha}) does not match the ` +
+                `current HEAD (${commitSha}). A commit landed between "npm run make" and ` +
+                '"npm run paid-release" (or the installer was built elsewhere) — re-run ' +
+                '"npm run make" at the release commit before packaging.'
+        );
+    }
+    if (buildInfo.version !== packageVersion) {
+        fail(
+            'build_info_version_mismatch',
+            `${BUILD_INFO_REL_PATH} version (${buildInfo.version}) does not match root ` +
+                `package.json version (${packageVersion}). Re-run "npm run make" after bumping ` +
+                'the version.'
+        );
+    }
+    if (buildInfo.treeDirty === true) {
+        fail(
+            'build_info_tree_dirty',
+            `${BUILD_INFO_REL_PATH} recorded a dirty tracked working tree at "npm run make" ` +
+                'time, so the installer may not correspond to any single commit. Commit or ' +
+                'stash, then re-run "npm run make".'
+        );
+    }
+}
+
+// Confirms the file passed via --installer is actually the Setup.exe that
+// forge.config.js's postMake hook hashed into out/build-info.json. Without
+// this, --installer accepts an arbitrary file path — even a 1 KB dummy —
+// and only the commit/version *metadata* in build-info.json (not the
+// installer bytes) would be checked.
+async function assertInstallerMatchesBuildInfo(buildInfo, installerPath, installerSize) {
+    if (installerSize !== buildInfo.installerSize) {
+        fail(
+            'build_info_installer_mismatch',
+            `--installer file size (${installerSize}) does not match ${BUILD_INFO_REL_PATH} ` +
+                `installerSize (${buildInfo.installerSize}). The file passed to --installer is not ` +
+                'the Setup.exe that "npm run make" produced for this commit.'
+        );
+    }
+    const actualSha256 = await sha256File(installerPath);
+    if (actualSha256 !== buildInfo.installerSha256) {
+        fail(
+            'build_info_installer_mismatch',
+            `--installer file SHA-256 (${actualSha256}) does not match ${BUILD_INFO_REL_PATH} ` +
+                `installerSha256 (${buildInfo.installerSha256}). The file passed to --installer is not ` +
+                'the Setup.exe that "npm run make" produced for this commit. Re-run "npm run make" ' +
+                'and pass the fresh Setup.exe.'
+        );
+    }
+}
+
 async function runNoticesCheck(repoRoot) {
     const r = spawnNpm(['run', 'notices:check'], { cwd: repoRoot, env: process.env });
     if (r.status !== 0) {
@@ -322,40 +483,17 @@ async function runNoticesCheck(repoRoot) {
 
 function gitArchiveSource(repoRoot, version, outputPath) {
     const prefix = `whisper-oh-kami-${version}/`;
-    const r = run(
-        'git',
-        ['archive', '--format=zip', `--prefix=${prefix}`, '-o', outputPath, 'HEAD'],
-        { cwd: repoRoot }
-    );
+    const r = run('git', ['archive', '--format=zip', `--prefix=${prefix}`, '-o', outputPath, 'HEAD'], { cwd: repoRoot });
     if (r.status !== 0) {
-        fail(
-            'git_archive_failed',
-            `git archive of source failed: ${r.stderr.trim() || r.stdout.trim()}`
-        );
+        fail('git_archive_failed', `git archive of source failed: ${r.stderr.trim() || r.stdout.trim()}`);
     }
 }
 
 function gitArchiveLockfiles(repoRoot, version, outputPath) {
     const prefix = `lockfiles-${version}/`;
-    const r = run(
-        'git',
-        [
-            'archive',
-            '--format=zip',
-            `--prefix=${prefix}`,
-            '-o',
-            outputPath,
-            'HEAD',
-            '--',
-            ...REQUIRED_LOCKFILES,
-        ],
-        { cwd: repoRoot }
-    );
+    const r = run('git', ['archive', '--format=zip', `--prefix=${prefix}`, '-o', outputPath, 'HEAD', '--', ...REQUIRED_LOCKFILES], { cwd: repoRoot });
     if (r.status !== 0) {
-        fail(
-            'lockfiles_zip_missing',
-            `git archive of lockfiles failed. Are both lockfiles tracked at HEAD?\n${r.stderr.trim() || r.stdout.trim()}`
-        );
+        fail('lockfiles_zip_missing', `git archive of lockfiles failed. Are both lockfiles tracked at HEAD?\n${r.stderr.trim() || r.stdout.trim()}`);
     }
 }
 
@@ -430,10 +568,7 @@ function extractZipEntry(zipBuf, entry) {
         // deflate (raw, no zlib header)
         return zlib.inflateRawSync(data);
     }
-    fail(
-        'zip_corrupt',
-        `Unsupported zip compression method ${compressionMethod} for entry ${entry.name}`
-    );
+    fail('zip_corrupt', `Unsupported zip compression method ${compressionMethod} for entry ${entry.name}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -529,33 +664,41 @@ async function main() {
 
     const rootPkg = await readRootPackageJson(repoRoot);
     if (semver.core !== rootPkg.version) {
-        fail(
-            'version_mismatch',
-            `--version core (${semver.core}) does not equal root package.json version (${rootPkg.version}).`
-        );
+        fail('version_mismatch', `--version core (${semver.core}) does not equal root package.json version (${rootPkg.version}).`);
     }
 
     // --- clean tree gate (allows untracked files; rejects modified tracked
     //                     files or staged changes)
     assertCleanTree(repoRoot);
 
+    // --- pull commit metadata for deterministic manifest fields
+    const commitSha = getCommitSha(repoRoot);
+    const generatedAt = getCommitIsoTimestamp(repoRoot);
+
+    // --- installer↔source provenance gate: out/build-info.json (written by
+    // forge.config.js's postMake hook at `npm run make` time) must exist,
+    // must record the current HEAD commit and package.json version, and must
+    // not have been produced on a dirty tracked tree. Without this, nothing
+    // stops an operator from packaging installer.exe alongside a source.zip
+    // for a commit the installer was never actually built from.
+    const buildInfo = await readBuildInfo(repoRoot);
+    assertBuildInfoMatches(buildInfo, { commitSha, packageVersion: rootPkg.version });
+
+    // --- installer↔build-info provenance gate: the actual --installer file's
+    // SHA-256 + size must equal what forge.config.js's postMake hook
+    // recorded for the real Setup.exe. This is what stops an arbitrary file
+    // (even one that happens to satisfy the commit/version checks above)
+    // from being packaged as installer.exe.
+    await assertInstallerMatchesBuildInfo(buildInfo, installerPath, installerStat.size);
+
     // --- notices:check (THIRD_PARTY_NOTICES.md must be current)
     await runNoticesCheck(repoRoot);
 
     // --- determine output directory; refuse to overwrite
-    const outDir = args.output
-        ? path.resolve(args.output)
-        : path.join(repoRoot, 'out', 'paid-release', args.version);
+    const outDir = args.output ? path.resolve(args.output) : path.join(repoRoot, 'out', 'paid-release', args.version);
     if (existsSync(outDir)) {
-        fail(
-            'output_exists',
-            `Output directory ${outDir} already exists. Move or delete it before re-running.`
-        );
+        fail('output_exists', `Output directory ${outDir} already exists. Move or delete it before re-running.`);
     }
-
-    // --- pull commit metadata for deterministic manifest fields
-    const commitSha = getCommitSha(repoRoot);
-    const generatedAt = getCommitIsoTimestamp(repoRoot);
 
     let outDirCreated = false;
     try {
@@ -567,7 +710,7 @@ async function main() {
         gitArchiveSource(repoRoot, args.version, sourceZipPath);
         const sourceZip = await readZipEntries(sourceZipPath);
         const sourcePrefixCheck = `whisper-oh-kami-${args.version}/`;
-        const sourceNames = new Set(sourceZip.entries.map((e) => e.name));
+        const sourceNames = new Set(sourceZip.entries.map(e => e.name));
         for (const required of REQUIRED_SOURCE_ENTRIES) {
             if (!sourceNames.has(`${sourcePrefixCheck}${required}`)) {
                 fail(
@@ -588,9 +731,7 @@ async function main() {
             if (rel === '') continue; // the prefix directory entry itself
             const isExcluded =
                 EXCLUDED_SOURCE_GLOB_RE.test(rel) ||
-                EXCLUDED_SOURCE_PREFIXES.some(
-                    (prefix) => rel === prefix || (prefix.endsWith('/') && rel.startsWith(prefix))
-                );
+                EXCLUDED_SOURCE_PREFIXES.some(prefix => rel === prefix || (prefix.endsWith('/') && rel.startsWith(prefix)));
             if (isExcluded) {
                 fail(
                     'source_contains_excluded_entries',
@@ -610,12 +751,9 @@ async function main() {
         // `package-lock.json` / `Cargo.lock` suffix.
         for (const required of REQUIRED_LOCKFILES) {
             const expectedName = `${lockfilesPrefix}${required}`;
-            const found = lockZip.entries.some((e) => e.name === expectedName);
+            const found = lockZip.entries.some(e => e.name === expectedName);
             if (!found) {
-                fail(
-                    'lockfiles_zip_missing',
-                    `lockfiles.zip is missing required lockfile ${required} (expected entry ${expectedName}).`
-                );
+                fail('lockfiles_zip_missing', `lockfiles.zip is missing required lockfile ${required} (expected entry ${expectedName}).`);
             }
         }
         // Cross-check that every lockfiles.zip entry's bytes equal the same
@@ -626,14 +764,11 @@ async function main() {
         // core.autocrlf is on.
         const sourcePrefix = `whisper-oh-kami-${args.version}/`;
         for (const required of REQUIRED_LOCKFILES) {
-            const lockEntry = lockZip.entries.find((e) => e.name === `${lockfilesPrefix}${required}`);
+            const lockEntry = lockZip.entries.find(e => e.name === `${lockfilesPrefix}${required}`);
             if (!lockEntry) continue; // already failed above
-            const sourceEntry = sourceZip.entries.find((e) => e.name === `${sourcePrefix}${required}`);
+            const sourceEntry = sourceZip.entries.find(e => e.name === `${sourcePrefix}${required}`);
             if (!sourceEntry) {
-                fail(
-                    'lockfile_entry_mismatch',
-                    `source.zip is missing ${sourcePrefix}${required}, so lockfiles.zip cannot be cross-verified.`
-                );
+                fail('lockfile_entry_mismatch', `source.zip is missing ${sourcePrefix}${required}, so lockfiles.zip cannot be cross-verified.`);
             }
             const lockBytes = extractZipEntry(lockZip.buf, lockEntry);
             const sourceBytes = extractZipEntry(sourceZip.buf, sourceEntry);
@@ -645,9 +780,25 @@ async function main() {
             }
         }
 
-        // --- installer copy
+        // --- installer copy + post-copy revalidation. The source Setup.exe
+        // was validated against build-info.json much earlier (before the
+        // notices check and ZIP generation), so a concurrent `npm run make`
+        // could have rewritten it in between — a TOCTOU window where
+        // unverified bytes land in the bundle. Hash the COPIED file and
+        // require it to still match build-info, so whatever actually ships
+        // is what was verified.
         const installerDest = path.join(outDir, 'installer.exe');
         await copyFileStream(installerPath, installerDest);
+        const installerDestSha256 = await sha256File(installerDest);
+        const installerDestSize = (await stat(installerDest)).size;
+        if (installerDestSha256 !== buildInfo.installerSha256 || installerDestSize !== buildInfo.installerSize) {
+            fail(
+                'build_info_installer_mismatch',
+                `Copied installer.exe (sha256=${installerDestSha256}, size=${installerDestSize}) no longer matches ` +
+                    `build-info.json (sha256=${buildInfo.installerSha256}, size=${buildInfo.installerSize}). ` +
+                    'The Setup.exe changed between validation and copy — rerun "npm run make" and retry without concurrent builds.'
+            );
+        }
 
         // --- LICENSE copy + verify
         const licenseSrc = path.join(repoRoot, 'LICENSE');
@@ -656,10 +807,7 @@ async function main() {
         const licenseSrcHash = await sha256File(licenseSrc);
         const licenseDestHash = await sha256File(licenseDest);
         if (licenseSrcHash !== licenseDestHash) {
-            fail(
-                'license_mismatch',
-                `Copied LICENSE hash ${licenseDestHash} does not match root ${licenseSrcHash}.`
-            );
+            fail('license_mismatch', `Copied LICENSE hash ${licenseDestHash} does not match root ${licenseSrcHash}.`);
         }
 
         // --- THIRD_PARTY_NOTICES copy + verify
@@ -669,10 +817,7 @@ async function main() {
         const noticesSrcHash = await sha256File(noticesSrc);
         const noticesDestHash = await sha256File(noticesDest);
         if (noticesSrcHash !== noticesDestHash) {
-            fail(
-                'notices_mismatch',
-                `Copied THIRD_PARTY_NOTICES.md hash ${noticesDestHash} does not match root ${noticesSrcHash}.`
-            );
+            fail('notices_mismatch', `Copied THIRD_PARTY_NOTICES.md hash ${noticesDestHash} does not match root ${noticesSrcHash}.`);
         }
 
         // --- guide + build-instructions copies
@@ -684,10 +829,7 @@ async function main() {
 
         const buildInstrSrc = path.join(repoRoot, BUILD_INSTRUCTIONS_REL_PATH);
         if (!existsSync(buildInstrSrc)) {
-            fail(
-                'build_instructions_missing',
-                `Build instructions not found at ${BUILD_INSTRUCTIONS_REL_PATH}.`
-            );
+            fail('build_instructions_missing', `Build instructions not found at ${BUILD_INSTRUCTIONS_REL_PATH}.`);
         }
         await copyFileStream(buildInstrSrc, path.join(outDir, 'build-instructions.md'));
 
@@ -714,6 +856,8 @@ async function main() {
             commitSha,
             expectedAuthenticodeState: EXPECTED_AUTHENTICODE_STATE,
             generatedAt,
+            installerBuiltAtUtc: buildInfo.builtAtUtc,
+            installerBuiltFromSha: buildInfo.commitSha,
             items: manifestItems,
             version: args.version,
         };
@@ -722,17 +866,15 @@ async function main() {
         await writeFile(path.join(outDir, MANIFEST_FILENAME), manifestText, 'utf8');
 
         const manifestSha = sha256Buffer(Buffer.from(manifestText, 'utf8'));
-        await writeFile(
-            path.join(outDir, MANIFEST_SHA_FILENAME),
-            `${manifestSha}  ${MANIFEST_FILENAME}\n`,
-            'utf8'
-        );
+        await writeFile(path.join(outDir, MANIFEST_SHA_FILENAME), `${manifestSha}  ${MANIFEST_FILENAME}\n`, 'utf8');
 
         // --- summary (no PII, no secrets)
         console.log(`paid-release: wrote ${outDir}`);
         console.log(`  version=${args.version}`);
         console.log(`  commitSha=${commitSha}`);
         console.log(`  generatedAt=${generatedAt}`);
+        console.log(`  installerBuiltFromSha=${buildInfo.commitSha}`);
+        console.log(`  installerBuiltAtUtc=${buildInfo.builtAtUtc}`);
         console.log(`  manifest.json.sha256=${manifestSha}`);
         for (const it of manifestItems) {
             console.log(`  ${it.filename}  ${it.sha256}  ${it.size}`);
@@ -752,7 +894,7 @@ async function main() {
     }
 }
 
-main().catch((err) => {
+main().catch(err => {
     if (err instanceof BuildError) {
         console.error(`paid-release: ${err.message}`);
         process.exit(2);

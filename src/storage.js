@@ -39,7 +39,18 @@ const DEFAULT_PREFERENCES = {
     googleSearchEnabled: false,
     ollamaHost: 'http://127.0.0.1:11434',
     ollamaModel: 'gemma3:4b',
-    whisperModel: 'Xenova/whisper-tiny',
+    // Xenova/whisper-tiny and Xenova/whisper-small ship bundled with the
+    // installer (see scripts/fetch-whisper-models.mjs); small is the default
+    // because tiny's Japanese accuracy proved unusable in practice (2026-09
+    // decision). onnx-community/kotoba-whisper-v2.2-ONNX is opt-in only
+    // (~1GB first-run download) and is never a default.
+    whisperModel: 'Xenova/whisper-small',
+    // Tracks whether the user has explicitly picked a Whisper model via the
+    // Customize UI. When false/absent, migrateWhisperModelDefaultIfNeeded()
+    // is allowed to upgrade a stale on-disk 'Xenova/whisper-tiny' value to
+    // the new default. Once true, the user's explicit choice (even tiny) is
+    // preserved across the migration.
+    whisperModelChosen: false,
     micDeviceId: '',
     systemDeviceId: 'auto',
     // STT routing for byok provider mode. Default is the privacy-safe local path.
@@ -79,12 +90,25 @@ function getConfigDirForName(name) {
 const CONFIG_DIR_NAME = 'whisper-oh-kami-config';
 const LEGACY_CONFIG_DIR_NAME = 'cheating-daddy-config';
 
+// Test-only overrides for the two directory paths (see __setConfigDirsForTest).
+// null in production: the paths are resolved lazily from os.homedir() so that
+// tests which mock os.homedir() before requiring this module keep working.
+let configDirOverride = null;
+let legacyConfigDirOverride = null;
+
 function getConfigDir() {
-    return getConfigDirForName(CONFIG_DIR_NAME);
+    return configDirOverride || getConfigDirForName(CONFIG_DIR_NAME);
 }
 
 function getLegacyConfigDir() {
-    return getConfigDirForName(LEGACY_CONFIG_DIR_NAME);
+    return legacyConfigDirOverride || getConfigDirForName(LEGACY_CONFIG_DIR_NAME);
+}
+
+// TEST-ONLY hook: point the current / legacy config directories at temp dirs.
+// Never call this from application code.
+function __setConfigDirsForTest({ current = null, legacy = null } = {}) {
+    configDirOverride = current;
+    legacyConfigDirOverride = legacy;
 }
 
 // File paths
@@ -305,6 +329,27 @@ function migrateLegacyConfigIfNeeded() {
     return _migrateBetween(getLegacyConfigDir(), getConfigDir());
 }
 
+// Whisper default-model migration (2026-09): Xenova/whisper-tiny's Japanese
+// accuracy proved unusable, so the default changed to Xenova/whisper-small.
+// Existing users' preferences.json has 'Xenova/whisper-tiny' written
+// explicitly by an earlier initializeStorage()/resetConfigDir() run — that
+// stale value must be upgraded to small UNLESS the user explicitly picked
+// tiny via the Customize UI (whisperModelChosen === true), in which case
+// their choice is preserved. A fresh install / a reset config never has this
+// problem: DEFAULT_PREFERENCES.whisperModel is already 'Xenova/whisper-small'.
+function migrateWhisperModelDefaultIfNeeded() {
+    const prefsPath = getPreferencesPath();
+    if (!fs.existsSync(prefsPath)) return false;
+
+    const saved = readJsonFile(prefsPath, null);
+    if (!saved || typeof saved !== 'object') return false;
+
+    if (saved.whisperModel === 'Xenova/whisper-tiny' && !saved.whisperModelChosen) {
+        return writeJsonFile(prefsPath, { ...saved, whisperModel: 'Xenova/whisper-small' });
+    }
+    return false;
+}
+
 // Initialize storage - call this on app startup
 function initializeStorage() {
     // 1. Migrate legacy cheating-daddy-config → whisper-oh-kami-config
@@ -320,6 +365,8 @@ function initializeStorage() {
         if (!fs.existsSync(historyDir)) {
             fs.mkdirSync(historyDir, { recursive: true });
         }
+        // 3. Upgrade a stale tiny default left over from before this change.
+        migrateWhisperModelDefaultIfNeeded();
     }
 
     getCredentials();
@@ -688,9 +735,28 @@ function deleteAllSessions() {
 
 // ============ CLEAR ALL DATA ============
 
+// 「すべてのデータを削除」: removes the whole config dir (history, API keys,
+// settings) AND the legacy config dir that the rebrand migration preserved —
+// otherwise the next launch would migrate the old data straight back in.
+// The current dir is not re-created here; initializeStorage() re-initializes
+// defaults on the next launch (the renderer quits the app right after this).
+// Not covered: the Whisper model cache and files the user exported for support.
+// Removes the current and the legacy config directories independently: a
+// failure on one (e.g. a file locked by another process) must not leave the
+// other — which can hold old API keys — in place. Returns the paths that
+// could not be removed so the UI can say so instead of claiming success.
 function clearAllData() {
-    resetConfigDir();
-    return true;
+    console.log('[storage] Clearing all local data');
+    const failed = [];
+    for (const dir of [getConfigDir(), getLegacyConfigDir()]) {
+        try {
+            fs.rmSync(dir, { recursive: true, force: true });
+        } catch (error) {
+            console.error('[storage] Could not remove a data directory:', error.code || error.message);
+            failed.push(dir);
+        }
+    }
+    return { success: failed.length === 0, failed };
 }
 
 function _setSafeStorageForTest(safeStorage) {
@@ -704,8 +770,10 @@ module.exports = {
     getConfigDir,
     getLegacyConfigDir,
     migrateLegacyConfigIfNeeded,
+    migrateWhisperModelDefaultIfNeeded,
     _migrateBetween,
     _setSafeStorageForTest,
+    __setConfigDirsForTest,
     CONFIG_DIR_NAME,
     LEGACY_CONFIG_DIR_NAME,
 

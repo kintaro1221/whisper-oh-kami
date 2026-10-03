@@ -98,7 +98,14 @@ out/
 .superpowers/
 
 # Per-machine Claude Code local settings (permissions / sandbox / etc.)
-.claude/
+# — skills/ and agents/ are shared harness definitions and ARE tracked
+.claude/*
+!.claude/skills/
+!.claude/agents/
 
 # Codex CLI local hooks/config and agent scratch outputs (machine-specific)
 .codex/
+
+# Bundled Whisper model files, fetched by scripts/fetch-whisper-models.mjs
+# per scripts/whisper-models.manifest.json (the manifest itself IS tracked).
+resources/

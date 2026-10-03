@@ -1,6 +1,6 @@
 // AudioWorkletProcessor: 48kHz mono Float32 → 16kHz Int16 LE PCM (3:1 decimation).
 // Loaded as a real file (not blob:) so CSP "script-src 'self' 'unsafe-inline'" allows it.
-// Mirrors C:\my-fs-pj\sokuroku\src\renderer\App.tsx workletCode.
+// Mirrors the worklet used by an internal STT client implementation.
 class DeepgramDownsampleProcessor extends AudioWorkletProcessor {
     constructor() {
         super();

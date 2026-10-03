@@ -18,6 +18,11 @@ const audioCapture = require('./audioCapture');
 const { createTurnEvents } = require('./turnEvents');
 const { createDevHarness } = require('./devHarness');
 const { createDiscoveryEvidence } = require('./discoveryEvidence');
+
+// Conversation text (transcripts, AI replies, screen-analysis results, raw
+// Gemini Live messages) is only logged when WOK_DEBUG=1. Default logs carry
+// lengths / counts only, so a shared console or log file does not leak the call.
+const VERBOSE = process.env.WOK_DEBUG === '1';
 const { createDiscoveryEvidenceLLM, shouldNotifyDiscoveryLLMRefiner } = require('./discoveryEvidenceLLM');
 const { buildSuggestionPrompt, resolveSuggestionProfile, buildEvidenceBlock } = require('./suggestionPrompt');
 const { detectShadowReasons } = require('./aiResponseGate');
@@ -101,6 +106,9 @@ function sendDiagnostic(diagnostic) {
 }
 
 function ensureDeepgramConnected() {
+    // Deepgram is a byok-only path: trial / local (Ollama) never send audio to
+    // Deepgram, even when a leftover key is stored.
+    if (currentProviderMode !== 'byok') return false;
     if (deepgramService && deepgramService.isConnected()) return true;
     // STT mode gate: 'local' opts out of Deepgram entirely. Audio still flows
     // to Gemini Live for multimodal context (see README "STT モードの考え方")
@@ -147,6 +155,8 @@ function ensureDeepgramConnected() {
 }
 
 function ensureDeepgramSystemConnected() {
+    // byok-only gate (see ensureDeepgramConnected).
+    if (currentProviderMode !== 'byok') return false;
     if (deepgramServiceSystem && deepgramServiceSystem.isConnected()) return true;
     // STT mode gate (see ensureDeepgramConnected for the rationale).
     if (getSttMode() === 'local') return false;
@@ -220,6 +230,13 @@ function buildContextMessage() {
 
 // Conversation management functions
 function initializeNewSession(profile = null, customPrompt = null) {
+    sessionGeneration.bump();
+    // A response still streaming from the previous session is now stale and
+    // its finally{} will no longer clear the in-flight flag (so it cannot
+    // clobber a newer call's flag) — release it here so the new session is
+    // not blocked behind a dead stream.
+    aiResponseInFlight = false;
+    clearPendingAi();
     currentSessionId = Date.now().toString();
     currentTranscription = '';
     currentDeepgramTranscription = '';
@@ -257,9 +274,17 @@ function initializeNewSession(profile = null, customPrompt = null) {
     }
 }
 
-function saveConversationTurn(transcription, aiResponse) {
+function saveConversationTurn(transcription, aiResponse, token) {
+    if (token && token.isStale()) {
+        console.log('[history] dropped turn from a closed session');
+        return;
+    }
+    // Never lazily start a session from a save: after close-session a late
+    // save would otherwise resurrect a ghost session (transcription-clear to
+    // the renderer, a restarted Discovery LLM refinement timer).
     if (!currentSessionId) {
-        initializeNewSession();
+        console.log('[history] dropped: no active session');
+        return;
     }
 
     const conversationTurn = {
@@ -269,7 +294,14 @@ function saveConversationTurn(transcription, aiResponse) {
     };
 
     conversationHistory.push(conversationTurn);
-    console.log('Saved conversation turn:', conversationTurn);
+    if (VERBOSE) {
+        console.log('Saved conversation turn:', conversationTurn);
+    } else {
+        console.log('[history] saved turn', {
+            chars: conversationTurn.transcription.length,
+            responseChars: conversationTurn.ai_response.length,
+        });
+    }
 
     // Send to renderer to save in IndexedDB
     sendToRenderer('save-conversation-turn', {
@@ -279,9 +311,15 @@ function saveConversationTurn(transcription, aiResponse) {
     });
 }
 
-function saveScreenAnalysis(prompt, response, model) {
+function saveScreenAnalysis(prompt, response, model, token) {
+    if (token && token.isStale()) {
+        console.log('[history] dropped screen analysis from a closed session');
+        return;
+    }
+    // See saveConversationTurn: no lazy session start from a save.
     if (!currentSessionId) {
-        initializeNewSession();
+        console.log('[history] dropped: no active session');
+        return;
     }
 
     const analysisEntry = {
@@ -292,7 +330,11 @@ function saveScreenAnalysis(prompt, response, model) {
     };
 
     screenAnalysisHistory.push(analysisEntry);
-    console.log('Saved screen analysis:', analysisEntry);
+    if (VERBOSE) {
+        console.log('Saved screen analysis:', analysisEntry);
+    } else {
+        console.log('[history] saved screen analysis', { model, responseChars: analysisEntry.response.length });
+    }
 
     // Send to renderer to save
     sendToRenderer('save-screen-analysis', {
@@ -373,6 +415,26 @@ function hasGroqKey() {
 // can act as a "side-by-side high performer" — answering opponent questions,
 // suggesting deeper questions after the user speaks, flagging missed items.
 let aiResponseInFlight = false;
+// Same-session freshness (v0.7.5): a request that arrives while a response
+// is in flight is not dropped — the LATEST one is kept here (overwritten,
+// never queued) and dispatched once when the current call finishes.
+// `pendingAiFromTurnEvents` marks a Live trigger, whose follow-up re-enters
+// processGenerationComplete so the prompt is rebuilt from the newest turns;
+// typed text is re-sent as-is through the same entry. Cleared on every
+// session boundary (initializeNewSession, close-session).
+let pendingAiTranscription = null;
+let pendingAiFromTurnEvents = false;
+// Session-generation guard: every session boundary (initializeNewSession,
+// close-session) bumps this counter; Groq / Gemma / screen-analysis streams
+// capture a token at start and drop their result once it is stale, so a
+// stopped session's late response never reaches the UI, history, or the
+// next session. See sessionGeneration.js.
+const { createGenerationCounter } = require('./sessionGeneration');
+const sessionGeneration = createGenerationCounter();
+// Dev tooling only (harness / diagnostics).
+function getSessionGeneration() {
+    return sessionGeneration.current;
+}
 const AI_MIN_TRANSCRIPT_CHARS = parseInt(process.env.AI_MIN_TRANSCRIPT_CHARS || '5', 10);
 const AI_MAX_TURN_HISTORY = parseInt(process.env.AI_MAX_TURN_HISTORY || '10', 10);
 const AI_OPPONENT_RECENT_WINDOW_MS = parseInt(process.env.AI_OPPONENT_RECENT_WINDOW_MS || '8000', 10);
@@ -501,9 +563,11 @@ function getLastShortClassification() {
     return lastShortClassification;
 }
 
-function shouldSkipAiResponse(transcription) {
+function shouldSkipAiResponse(transcription, { fromTurnEvents = false } = {}) {
     if (aiResponseInFlight) {
-        console.log('[AI skipped] previous response still in flight, dropping new request');
+        pendingAiTranscription = transcription;
+        pendingAiFromTurnEvents = fromTurnEvents;
+        console.log('[AI deferred] previous response still in flight; keeping the latest request for one follow-up');
         return true;
     }
     const text = (transcription || '').trim();
@@ -512,14 +576,35 @@ function shouldSkipAiResponse(transcription) {
         const classification = classifyShortUtterance();
         lastShortClassification = classification;
         if (classification === 'noise') {
-            console.log(`[AI skipped] short utterance classified as noise (no relevant opponent context): "${text}"`);
+            console.log(
+                `[AI skipped] short utterance classified as noise (no relevant opponent context): ${VERBOSE ? `"${text}"` : `chars=${text.length}`}`
+            );
             return true;
         }
-        console.log(`[AI allowed] short utterance "${text}" → classified as ${classification}`);
+        console.log(`[AI allowed] short utterance ${VERBOSE ? `"${text}"` : `chars=${text.length}`} → classified as ${classification}`);
         return false;
     }
     lastShortClassification = null;
     return false;
+}
+
+function clearPendingAi() {
+    pendingAiTranscription = null;
+    pendingAiFromTurnEvents = false;
+}
+
+// Called from the finally{} of sendToGroq / sendToGemma once the in-flight
+// flag of a non-stale call is released: dispatch the one deferred request.
+function dispatchPendingAi(entry) {
+    if (pendingAiTranscription == null) return;
+    const text = pendingAiTranscription;
+    const fromTurnEvents = pendingAiFromTurnEvents;
+    clearPendingAi();
+    if (fromTurnEvents) {
+        processGenerationComplete(text);
+    } else {
+        entry(text);
+    }
 }
 
 function trimConversationHistoryForGemma(history, maxChars = 42000) {
@@ -618,6 +703,9 @@ function buildSystemPromptWithScreenContext(basePrompt) {
 }
 
 async function sendToGroq(transcription) {
+    // No advice outside a live session (e.g. a Live generationComplete that
+    // lands while close-session is awaiting the Live socket close).
+    if (!currentSessionId) return;
     const groqApiKey = getGroqApiKey();
     if (!groqApiKey) {
         console.log('No Groq API key configured, skipping Groq response');
@@ -634,7 +722,12 @@ async function sendToGroq(transcription) {
     }
 
     aiResponseInFlight = true;
-    console.log(`Sending to Groq (${modelToUse}):`, transcription.substring(0, 100) + '...');
+    const token = sessionGeneration.capture();
+    if (VERBOSE) {
+        console.log(`Sending to Groq (${modelToUse}):`, transcription.substring(0, 100) + '...');
+    } else {
+        console.log(`Sending to Groq (${modelToUse})`, { chars: transcription.length });
+    }
 
     groqConversationHistory.push({
         role: 'user',
@@ -664,7 +757,7 @@ async function sendToGroq(transcription) {
         if (!response.ok) {
             const errorText = await response.text();
             console.error('Groq API error:', response.status, errorText);
-            sendToRenderer('update-status', `Groq error: ${response.status}`);
+            if (!token.isStale()) sendToRenderer('update-status', `Groq error: ${response.status}`);
             return;
         }
 
@@ -676,6 +769,10 @@ async function sendToGroq(transcription) {
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
+            if (token.isStale()) {
+                reader.cancel().catch(() => {});
+                break;
+            }
 
             const chunk = decoder.decode(value, { stream: true });
             const lines = chunk.split('\n').filter(line => line.trim() !== '');
@@ -687,11 +784,11 @@ async function sendToGroq(transcription) {
 
                     try {
                         const json = JSON.parse(data);
-                        const token = json.choices?.[0]?.delta?.content || '';
-                        if (token) {
-                            fullText += token;
+                        const delta = json.choices?.[0]?.delta?.content || '';
+                        if (delta) {
+                            fullText += delta;
                             const displayText = stripThinkingTags(fullText);
-                            if (displayText) {
+                            if (displayText && !token.isStale()) {
                                 sendToRenderer(isFirst ? 'new-response' : 'update-response', displayText);
                                 isFirst = false;
                             }
@@ -714,13 +811,18 @@ async function sendToGroq(transcription) {
 
         incrementCharUsage('groq', modelKey, inputChars + outputChars);
 
+        if (token.isStale()) {
+            console.log('[AI] stale stream dropped');
+            return;
+        }
+
         if (cleanedResponse) {
             groqConversationHistory.push({
                 role: 'assistant',
                 content: cleanedResponse,
             });
 
-            saveConversationTurn(transcription, cleanedResponse);
+            saveConversationTurn(transcription, cleanedResponse, token);
         }
 
         console.log(`Groq response completed (${modelToUse})`);
@@ -728,13 +830,20 @@ async function sendToGroq(transcription) {
     } catch (error) {
         console.error('Error calling Groq API:', error);
         lastAiErrorKind = classifyAiError(error);
-        sendToRenderer('update-status', `Groq ${lastAiErrorKind}: ` + error.message);
+        if (!token.isStale()) sendToRenderer('update-status', `Groq ${lastAiErrorKind}: ` + error.message);
     } finally {
-        aiResponseInFlight = false;
+        // A stale call must not clear the flag of a newer session's call
+        // (nor dispatch a request deferred in that newer session).
+        if (!token.isStale()) {
+            aiResponseInFlight = false;
+            dispatchPendingAi(sendToGroq);
+        }
     }
 }
 
 async function sendToGemma(transcription) {
+    // No advice outside a live session (see sendToGroq).
+    if (!currentSessionId) return;
     const apiKey = getApiKey();
     if (!apiKey) {
         console.log('No Gemini API key configured');
@@ -744,7 +853,12 @@ async function sendToGemma(transcription) {
     if (shouldSkipAiResponse(transcription)) return;
 
     aiResponseInFlight = true;
-    console.log('Sending to Gemma:', transcription.substring(0, 100) + '...');
+    const token = sessionGeneration.capture();
+    if (VERBOSE) {
+        console.log('Sending to Gemma:', transcription.substring(0, 100) + '...');
+    } else {
+        console.log('Sending to Gemma', { chars: transcription.length });
+    }
 
     groqConversationHistory.push({
         role: 'user',
@@ -791,6 +905,7 @@ async function sendToGemma(transcription) {
                 let stream = '';
                 let isFirst = true;
                 for await (const chunk of response) {
+                    if (token.isStale()) break;
                     const chunkText = chunk.text;
                     if (chunkText) {
                         stream += chunkText;
@@ -803,12 +918,18 @@ async function sendToGemma(transcription) {
                 break;
             } catch (err) {
                 lastModelErr = err;
+                // Do not spend another fallback call on a closed session.
+                if (token.isStale()) break;
                 if (classifyAiError(err) === 'rate_limited') {
                     console.warn(`[Gemma] ${model} rate-limited; trying next fallback`);
                     continue;
                 }
                 throw err;
             }
+        }
+        if (modelUsed === null && token.isStale()) {
+            console.log('[AI] stale stream dropped');
+            return;
         }
         if (modelUsed === null) {
             throw lastModelErr || new Error('All Gemma fallback models failed');
@@ -820,6 +941,11 @@ async function sendToGemma(transcription) {
         const outputChars = fullText.length;
 
         incrementCharUsage('gemini', modelUsed, inputChars + outputChars);
+
+        if (token.isStale()) {
+            console.log('[AI] stale stream dropped');
+            return;
+        }
 
         const eventKindNow = getLastDispatchedEventKind();
         const cleanedFullText = ensureSectionHeaders(stripForbiddenSections(fullText, eventKindNow), eventKindNow);
@@ -833,7 +959,7 @@ async function sendToGemma(transcription) {
                 groqConversationHistory = groqConversationHistory.slice(-40);
             }
 
-            saveConversationTurn(transcription, cleanedFullText);
+            saveConversationTurn(transcription, cleanedFullText, token);
         }
 
         console.log('Gemma response completed');
@@ -841,9 +967,14 @@ async function sendToGemma(transcription) {
     } catch (error) {
         console.error('Error calling Gemma API:', error);
         lastAiErrorKind = classifyAiError(error);
-        sendToRenderer('update-status', `Gemma ${lastAiErrorKind}: ` + error.message);
+        if (!token.isStale()) sendToRenderer('update-status', `Gemma ${lastAiErrorKind}: ` + error.message);
     } finally {
-        aiResponseInFlight = false;
+        // A stale call must not clear the flag of a newer session's call
+        // (nor dispatch a request deferred in that newer session).
+        if (!token.isStale()) {
+            aiResponseInFlight = false;
+            dispatchPendingAi(sendToGemma);
+        }
     }
 }
 
@@ -887,7 +1018,7 @@ function processGenerationComplete(triggerText) {
 
     // Run the gate FIRST so dev/observability can see skip-vs-allow decisions
     // even when AI dispatch itself is disabled via DISABLE_AI_RESPONSE.
-    if (shouldSkipAiResponse(trigger)) {
+    if (shouldSkipAiResponse(trigger, { fromTurnEvents: true })) {
         return { fired: false, reason: 'skipped', eventKind, classification: getLastShortClassification() };
     }
     // Snapshot classification BEFORE dispatching: sendToGroq/sendToGemma each
@@ -1004,7 +1135,7 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'sal
                     sendToRenderer('update-status', 'Live session connected');
                 },
                 onmessage: function (message) {
-                    console.log('----------------', message);
+                    if (VERBOSE) console.log('----------------', message);
 
                     // Handle input transcription (what was spoken).
                     // When Deepgram is active we suppress UI emission of Gemini Live's
@@ -1358,6 +1489,9 @@ async function sendAudioToGemini(base64Data, geminiSessionRef) {
 }
 
 async function sendImageToGeminiHttp(base64Data, prompt) {
+    // A screenshot delivered after close-session must not reach Gemini or
+    // the history of a session that no longer exists.
+    if (!currentSessionId) return { success: false, error: 'session_closed' };
     // Get available model based on rate limits
     const model = getAvailableModel();
 
@@ -1371,6 +1505,7 @@ async function sendImageToGeminiHttp(base64Data, prompt) {
     // respond in English. Prepending an explicit language directive overrides it.
     const localizedPrompt = '回答は必ず日本語で行ってください。コードや英語固有名詞・専門用語のみ英語のまま使用可。\n\n' + prompt;
 
+    const token = sessionGeneration.capture();
     try {
         const ai = new GoogleGenAI({ apiKey: apiKey });
 
@@ -1397,6 +1532,7 @@ async function sendImageToGeminiHttp(base64Data, prompt) {
         let fullText = '';
         let isFirst = true;
         for await (const chunk of response) {
+            if (token.isStale()) break;
             const chunkText = chunk.text;
             if (chunkText) {
                 fullText += chunkText;
@@ -1406,11 +1542,16 @@ async function sendImageToGeminiHttp(base64Data, prompt) {
             }
         }
 
+        if (token.isStale()) {
+            console.log('[AI] stale screen analysis dropped');
+            return { success: false, error: 'session_closed' };
+        }
+
         console.log(`Image response completed from ${model}`);
 
         // Save screen analysis to history (store the original prompt without the
         // Japanese-forcing prefix so history stays clean).
-        saveScreenAnalysis(prompt, fullText, model);
+        saveScreenAnalysis(prompt, fullText, model, token);
 
         return { success: true, text: fullText, model: model };
     } catch (error) {
@@ -1605,7 +1746,8 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
 
         if (currentProviderMode === 'local') {
             try {
-                console.log('Sending text to local Ollama:', text);
+                if (VERBOSE) console.log('Sending text to local Ollama:', text);
+                else console.log('Sending text to local Ollama', { chars: text.length });
                 return await getLocalAi().sendLocalText(text.trim());
             } catch (error) {
                 console.error('Error sending local text:', error);
@@ -1616,7 +1758,8 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
         if (!geminiSessionRef.current) return { success: false, error: 'No active Gemini session' };
 
         try {
-            console.log('Sending text message:', text);
+            if (VERBOSE) console.log('Sending text message:', text);
+            else console.log('Sending text message', { chars: text.length });
 
             if (hasGroqKey()) {
                 sendToGroq(text.trim());
@@ -1715,6 +1858,26 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
         }
     });
 
+    // v0.7.5 manual evidence actions. Automatic detection tops out at
+    // 'detected'; only the user (after hearing it from the customer) can mark an
+    // element 'confirmed', and retract clears a wrong candidate back to empty.
+    ipcMain.handle('discovery-evidence-confirm', async (event, key) => {
+        const result = discoveryEvidenceStore.confirmElement(String(key || ''));
+        if (result.changed) sendToRenderer('discovery-evidence-update', result.state);
+        return { success: result.changed };
+    });
+
+    ipcMain.handle('discovery-evidence-retract', async (event, key) => {
+        const result = discoveryEvidenceStore.retractElement(String(key || ''), 'manual');
+        if (result.changed) sendToRenderer('discovery-evidence-update', result.state);
+        return { success: result.changed };
+    });
+
+    // Renderer asks this before deciding whether the native audio helper is
+    // needed (src/utils/audioHelperPolicy.js). Returns only a boolean — the
+    // key itself never leaves the main process.
+    ipcMain.handle('has-deepgram-key', () => !!getDeepgramApiKey());
+
     ipcMain.handle('close-session', async event => {
         try {
             stopMacOSAudioCapture();
@@ -1729,6 +1892,13 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
             // BYOK session cannot keep firing Gemini Flash against stale
             // transcript data.
             stopDiscoveryLLMRefiner();
+            // Invalidate every in-flight async result (advice streams,
+            // screen analysis) of the session being closed, and release the
+            // in-flight gate so the next session is not blocked by them.
+            sessionGeneration.bump();
+            aiResponseInFlight = false;
+            clearPendingAi();
+            currentSessionId = null;
             disconnectDeepgram();
 
             if (currentProviderMode === 'local' || currentProviderMode === 'trial') {
@@ -1795,6 +1965,9 @@ module.exports = {
     initializeNewSession,
     saveConversationTurn,
     getCurrentSessionData,
+    // Dev tooling / tests only.
+    getSessionGeneration,
+    isAiResponseInFlight: () => aiResponseInFlight,
     killExistingSystemAudioDump,
     startMacOSAudioCapture,
     convertStereoToMono,

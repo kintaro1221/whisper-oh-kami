@@ -278,6 +278,7 @@ export class CustomizeView extends LitElement {
         selectedImageQuality: { type: String },
         layoutMode: { type: String },
         sttMode: { type: String },
+        whisperModel: { type: String },
         keybinds: { type: Object },
         googleSearchEnabled: { type: Boolean },
         backgroundTransparency: { type: Number },
@@ -306,6 +307,7 @@ export class CustomizeView extends LitElement {
         this.selectedImageQuality = 'medium';
         this.layoutMode = 'normal';
         this.sttMode = 'local';
+        this.whisperModel = 'Xenova/whisper-small';
         this.keybinds = this.getDefaultKeybinds();
         this.onProfileChange = () => {};
         this.onLanguageChange = () => {};
@@ -364,6 +366,18 @@ export class CustomizeView extends LitElement {
         return whisperOhKami.theme.getAll();
     }
 
+    getWhisperModels() {
+        return [
+            { value: 'Xenova/whisper-tiny', name: t('customize.whisper.model.tiny_name'), help: t('customize.whisper.model.tiny_help') },
+            { value: 'Xenova/whisper-small', name: t('customize.whisper.model.small_name'), help: t('customize.whisper.model.small_help') },
+            {
+                value: 'onnx-community/kotoba-whisper-v2.2-ONNX',
+                name: t('customize.whisper.model.kotoba_name'),
+                help: t('customize.whisper.model.kotoba_help'),
+            },
+        ];
+    }
+
     async _loadFromStorage() {
         try {
             const [prefs, keybinds] = await Promise.all([whisperOhKami.storage.getPreferences(), whisperOhKami.storage.getKeybinds()]);
@@ -374,6 +388,7 @@ export class CustomizeView extends LitElement {
             this.customPrompt = prefs.customPrompt ?? '';
             this.theme = prefs.theme ?? 'light';
             this.sttMode = ['cloud', 'local'].includes(prefs.sttMode) ? prefs.sttMode : 'local';
+            this.whisperModel = this.getWhisperModels().some(m => m.value === prefs.whisperModel) ? prefs.whisperModel : 'Xenova/whisper-small';
             if (keybinds) {
                 this.keybinds = { ...this.getDefaultKeybinds(), ...keybinds };
             }
@@ -482,6 +497,17 @@ export class CustomizeView extends LitElement {
         const next = e.target.value;
         this.sttMode = next;
         this.onSttModeChange(next);
+        this.requestUpdate();
+    }
+
+    async handleWhisperModelSelect(e) {
+        const next = e.target.value;
+        this.whisperModel = next;
+        await whisperOhKami.storage.updatePreference('whisperModel', next);
+        // Marks this as an explicit user choice so a future default-model
+        // migration (see storage.js migrateWhisperModelDefaultIfNeeded)
+        // never silently overrides it.
+        await whisperOhKami.storage.updatePreference('whisperModelChosen', true);
         this.requestUpdate();
     }
 
@@ -674,7 +700,17 @@ export class CustomizeView extends LitElement {
         this.clearStatusType = '';
         this.requestUpdate();
         try {
-            await whisperOhKami.storage.clearAll();
+            const result = await whisperOhKami.storage.clearAll();
+            if (!result || !result.success) {
+                // Some data is still on disk: say which, and do not quit.
+                const failed = (result && result.failed) || [];
+                this.clearStatusMessage =
+                    failed.length > 0
+                        ? t('customize.privacy.clear_failed').replace('{paths}', failed.join(', '))
+                        : t('customize.privacy.clear_error').replace('{message}', (result && result.error) || '');
+                this.clearStatusType = 'error';
+                return;
+            }
             this.clearStatusMessage = t('customize.privacy.cleared_local');
             this.clearStatusType = 'success';
             this.requestUpdate();
@@ -763,6 +799,26 @@ export class CustomizeView extends LitElement {
                             </label>
                         `
                     )}
+                </div>
+            </section>
+        `;
+    }
+
+    renderWhisperModelSection() {
+        const models = this.getWhisperModels();
+        const selected = models.find(m => m.value === this.whisperModel);
+        return html`
+            <section class="surface">
+                <div class="surface-title">${t('customize.whisper.title')}</div>
+                <p class="stt-mode-section-help">${t('customize.whisper.section_help')}</p>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label">${t('customize.whisper.model_label')}</label>
+                        <select class="control" .value=${this.whisperModel} @change=${this.handleWhisperModelSelect}>
+                            ${models.map(model => html`<option value=${model.value}>${model.name}</option>`)}
+                        </select>
+                    </div>
+                    ${selected ? html`<p class="stt-mode-section-help">${selected.help}</p>` : ''}
                 </div>
             </section>
         `;
@@ -863,22 +919,26 @@ export class CustomizeView extends LitElement {
         return html`
             <section class="surface">
                 <div class="surface-title">${t('customize.keybind.title')}</div>
-                ${this.shortcutDuplicates.length
-                    ? html`<div class="status warning">同じキーが複数の操作に設定されています: ${duplicateText}</div>`
-                    : ''}
+                ${
+                    this.shortcutDuplicates.length
+                        ? html`<div class="status warning">同じキーが複数の操作に設定されています: ${duplicateText}</div>`
+                        : ''
+                }
                 ${this.getKeybindActions().map(action => {
                     const status = statusByAction[action.key];
                     return html`
                         <div class="keybind-row">
                             <span class="keybind-meta">
                                 <span class="keybind-name">${action.name}</span>
-                                ${status
-                                    ? html`<span class="keybind-status ${status.success ? '' : 'error'}">
-                                          ${status.success ? '登録済み' : `未登録: ${status.error || '登録に失敗しました'}`}
-                                      </span>`
-                                    : html`<span class="keybind-status"
-                                          >${action.category === 'window_movement' ? '表示は控えめ。必要な場合だけ変更' : ''}</span
-                                      >`}
+                                ${
+                                    status
+                                        ? html`<span class="keybind-status ${status.success ? '' : 'error'}">
+                                              ${status.success ? '登録済み' : `未登録: ${status.error || '登録に失敗しました'}`}
+                                          </span>`
+                                        : html`<span class="keybind-status"
+                                              >${action.category === 'window_movement' ? '表示は控えめ。必要な場合だけ変更' : ''}</span
+                                          >`
+                                }
                             </span>
                             <input
                                 type="text"
@@ -902,6 +962,7 @@ export class CustomizeView extends LitElement {
         return html`
             <section class="surface danger-surface">
                 <div class="surface-title danger">${t('customize.privacy.title')}</div>
+                <p class="stt-mode-section-help">${t('customize.privacy.saved_data_help')}</p>
                 <div style="display:flex;gap:var(--space-sm);flex-wrap:wrap;">
                     <button
                         class="control"
@@ -918,12 +979,16 @@ export class CustomizeView extends LitElement {
                         ${this.isClearing ? t('customize.privacy.clearing') : t('customize.privacy.clear_all')}
                     </button>
                 </div>
-                ${this.clearStatusMessage
-                    ? html` <div class="status ${this.clearStatusType === 'success' ? 'success' : 'error'}">${this.clearStatusMessage}</div> `
-                    : ''}
-                ${this.supportExportMessage
-                    ? html` <div class="status ${this.supportExportType === 'success' ? 'success' : 'error'}">${this.supportExportMessage}</div> `
-                    : ''}
+                ${
+                    this.clearStatusMessage
+                        ? html` <div class="status ${this.clearStatusType === 'success' ? 'success' : 'error'}">${this.clearStatusMessage}</div> `
+                        : ''
+                }
+                ${
+                    this.supportExportMessage
+                        ? html` <div class="status ${this.supportExportType === 'success' ? 'success' : 'error'}">${this.supportExportMessage}</div> `
+                        : ''
+                }
             </section>
         `;
     }
@@ -933,8 +998,8 @@ export class CustomizeView extends LitElement {
             <div class="unified-page">
                 <div class="unified-wrap">
                     <div class="page-title">${t('customize.page.title')}</div>
-                    ${this.renderSttModeSection()} ${this.renderAudioSection()} ${this.renderLanguageSection()} ${this.renderAppearanceSection()}
-                    ${this.renderKeyboardSection()} ${this.renderPrivacySection()}
+                    ${this.renderSttModeSection()} ${this.renderWhisperModelSection()} ${this.renderAudioSection()} ${this.renderLanguageSection()}
+                    ${this.renderAppearanceSection()} ${this.renderKeyboardSection()} ${this.renderPrivacySection()}
                 </div>
             </div>
         `;

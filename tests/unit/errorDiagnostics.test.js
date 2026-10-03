@@ -32,6 +32,18 @@ describe('errorDiagnostics classification', () => {
         expect(classifyAudioHelperFailure({ ok: false, error: 'native helper binary not found' })).toMatchObject({ code: 'audio_helper_failed' });
     });
 
+    test('audio_helper_failed states the impact (Deepgram → Gemini Live fallback) and the remedy in both locales', () => {
+        const d = createDiagnostic('audio_helper_failed');
+        expect(ja[d.causeKey]).toMatch(/Deepgram/);
+        expect(ja[d.causeKey]).toMatch(/Gemini Live/);
+        expect(ja[d.actionKey]).toMatch(/再起動/);
+        expect(ja[d.actionKey]).toContain(ja['customize.stt.local.title']);
+        expect(en[d.causeKey]).toMatch(/Deepgram/);
+        expect(en[d.causeKey]).toMatch(/Gemini Live/);
+        expect(en[d.actionKey]).toMatch(/[Rr]estart/);
+        expect(en[d.actionKey]).toContain(en['customize.stt.local.title']);
+    });
+
     test('every diagnostic code has Japanese and English title/cause/action strings', () => {
         for (const code of DIAGNOSTIC_CODES) {
             const diagnostic = createDiagnostic({ code });

@@ -9,7 +9,7 @@
 //   2. resolveSuggestionProfile is an explicit whitelist, not a `||
 //      'discovery'` fallback. devHarness.js uses the fallback for its
 //      own bootstrapping but production must stay safe.
-//   3. filled / partial elements carry their most recent quote so the
+//   3. detected / confirmed / partial elements carry their most recent quote so the
 //      model can avoid re-asking; empty elements get a label-only line;
 //      the trailing instruction is present.
 
@@ -20,7 +20,9 @@ const { resolveSuggestionProfile, buildEvidenceBlock, buildSuggestionPrompt } = 
 function makeElement(status, text) {
     return {
         status,
-        evidence: text ? [{ text, timestamp: 0, specificity: status === 'filled' ? 'concrete' : 'keyword', source: 'regex' }] : [],
+        evidence: text
+            ? [{ text, timestamp: 0, specificity: status === 'detected' || status === 'confirmed' ? 'concrete' : 'keyword', source: 'regex' }]
+            : [],
         lastUpdate: text ? 0 : null,
     };
 }
@@ -34,7 +36,8 @@ function makeEvidence(overrides = {}) {
     }
     return {
         elements,
-        totalScore: keys.filter(k => elements[k].status === 'filled').length,
+        totalScore: keys.filter(k => elements[k].status === 'detected' || elements[k].status === 'confirmed').length,
+        confirmedCount: keys.filter(k => elements[k].status === 'confirmed').length,
         updatedAt: 0,
     };
 }
@@ -92,7 +95,7 @@ describe('buildEvidenceBlock — defensive on missing / malformed state', () => 
     });
 
     test('missing element keys default to empty (no crash)', () => {
-        const out = buildEvidenceBlock({ elements: { pain: { status: 'filled', evidence: [{ text: '残業' }] } } });
+        const out = buildEvidenceBlock({ elements: { pain: { status: 'detected', evidence: [{ text: '残業' }] } } });
         expect(out).toContain('# ヒアリング進捗 (5要素 / BANT 実測、背景チェック指標)');
         // The 4 missing keys still render as empty lines (no quote).
         expect(out).toMatch(/- KPI \(Need 規模\): empty/);
@@ -106,7 +109,7 @@ describe('buildEvidenceBlock — defensive on missing / malformed state', () => 
 
 describe('buildSuggestionPrompt — discovery / sales get the evidence block (Phase 2.A / 2.D)', () => {
     test('discovery: evidence block is prepended, ahead of "直近の対話"', () => {
-        const ev = makeEvidence({ pain: { status: 'filled', text: '残業が月50時間で離職が続いている' } });
+        const ev = makeEvidence({ pain: { status: 'detected', text: '残業が月50時間で離職が続いている' } });
         const out = buildSuggestionPrompt({ ...BASE_ARGS, profile: 'discovery', evidenceState: ev });
         // Phase 2.D updated the header from "(5要素 / BANT 実測)" to
         // "(5要素 / BANT 実測、背景チェック指標)" to make the reframe visible
@@ -118,7 +121,7 @@ describe('buildSuggestionPrompt — discovery / sales get the evidence block (Ph
     });
 
     test('sales: same inject path as discovery', () => {
-        const ev = makeEvidence({ pain: { status: 'filled', text: '人手不足' } });
+        const ev = makeEvidence({ pain: { status: 'detected', text: '人手不足' } });
         const out = buildSuggestionPrompt({ ...BASE_ARGS, profile: 'sales', evidenceState: ev });
         expect(out.startsWith('# ヒアリング進捗')).toBe(true);
     });
@@ -137,7 +140,7 @@ describe('buildSuggestionPrompt — discovery / sales get the evidence block (Ph
 // ── buildSuggestionPrompt — non-discovery/sales unchanged ─────────────────
 
 describe('buildSuggestionPrompt — non-discovery/sales profiles are byte-unchanged', () => {
-    const ev = makeEvidence({ pain: { status: 'filled', text: 'painful' } });
+    const ev = makeEvidence({ pain: { status: 'detected', text: 'painful' } });
     const baseline = '# 商談の直近の対話\n[相手] 残業が月50時間で\n[自分] そうですか\n\n# 今回のイベント\nself_finished (直近の発話: self)';
 
     test('interview / meeting / presentation / negotiation / exam: no evidence block', () => {
@@ -160,12 +163,12 @@ describe('buildSuggestionPrompt — non-discovery/sales profiles are byte-unchan
     });
 });
 
-// ── buildSuggestionPrompt — empty/partial prioritized, filled marked ─────
+// ── buildSuggestionPrompt — empty/partial prioritized, detected/confirmed marked ─
 
 describe('buildSuggestionPrompt — evidence block content + conversation-first instruction (Phase 2.D refinement of 2.A)', () => {
-    test('filled element exposes its last quote so the model can avoid re-asking; instruction is conversation-first', () => {
+    test('detected element exposes its last quote so the model can avoid re-asking; instruction is conversation-first', () => {
         const ev = makeEvidence({
-            pain: { status: 'filled', text: '人手不足で離職が出ている' },
+            pain: { status: 'detected', text: '人手不足で離職が出ている' },
             kpi: { status: 'partial', text: '件数は感覚値で月10件くらい' },
             authority: { status: 'empty' },
             budget: { status: 'empty' },
@@ -173,7 +176,7 @@ describe('buildSuggestionPrompt — evidence block content + conversation-first 
         });
         const out = buildSuggestionPrompt({ ...BASE_ARGS, profile: 'discovery', evidenceState: ev });
 
-        // filled quote visible — drives the "重複質問を避ける" decision
+        // detected quote visible — drives the "重複質問を避ける" decision
         expect(out).toContain('人手不足で離職');
         // partial quote visible — same driver, different status
         expect(out).toContain('件数は感覚値');
@@ -189,7 +192,8 @@ describe('buildSuggestionPrompt — evidence block content + conversation-first 
         // surfacing only in the 3 limited Phase-2 timings.
         expect(out).toContain('背景チェック');
         expect(out).toContain('会話の流れを最優先');
-        expect(out).toContain('filled 要素の重複質問だけ避ける');
+        expect(out).toContain('confirmed 要素の重複質問だけ避ける');
+        expect(out).not.toContain('filled 要素');
         expect(out).toContain('解決策提示済');
 
         // The old Phase 2.A directives must NOT appear — they conflicted
@@ -201,9 +205,9 @@ describe('buildSuggestionPrompt — evidence block content + conversation-first 
 
     test('quote is truncated to 40 chars (prompt-budget guard)', () => {
         const longQuote = 'あ'.repeat(80);
-        const ev = makeEvidence({ pain: { status: 'filled', text: longQuote } });
+        const ev = makeEvidence({ pain: { status: 'detected', text: longQuote } });
         const out = buildSuggestionPrompt({ ...BASE_ARGS, profile: 'discovery', evidenceState: ev });
-        const match = out.match(/- 課題 \(Need 痛み\): filled ・ 直近: "([^"]*)"/);
+        const match = out.match(/- 課題 \(Need 痛み\): detected ・ 直近: "([^"]*)"/);
         expect(match).not.toBeNull();
         expect(match[1].length).toBeLessThanOrEqual(40);
     });
@@ -218,5 +222,51 @@ describe('buildSuggestionPrompt — evidence block content + conversation-first 
         expect(out).toContain('決裁 (Authority)');
         expect(out).toContain('予算 (Budget)');
         expect(out).toContain('期限 (Timeline)');
+    });
+});
+
+describe('buildEvidenceBlock — detected candidates vs customer-confirmed elements', () => {
+    test('evidence block distinguishes detected from confirmed and asks to verify candidates', () => {
+        const block = buildEvidenceBlock({
+            elements: {
+                pain: { status: 'empty', evidence: [] },
+                kpi: { status: 'empty', evidence: [] },
+                authority: { status: 'empty', evidence: [] },
+                budget: { status: 'detected', evidence: [{ text: '予算は100万円です' }] },
+                timeline: { status: 'confirmed', evidence: [{ text: '3月末まで' }] },
+            },
+        });
+        expect(block).toContain('予算 (Budget): detected ・ 直近: "予算は100万円です"');
+        expect(block).toContain('期限 (Timeline): confirmed');
+        expect(block).toContain('confirmed 要素の重複質問だけ避ける');
+        expect(block).toContain('detected は候補');
+    });
+});
+
+describe('buildEvidenceBlock — retracted rows are history, not the current quote', () => {
+    test('latest quote skips retracted rows and the manual retraction marker', () => {
+        const block = buildEvidenceBlock({
+            elements: {
+                budget: {
+                    status: 'partial',
+                    evidence: [
+                        { text: '予算は300万円くらい', retracted: false },
+                        { text: '予算は500万円です', retracted: true },
+                        { text: '[manual]', source: 'user', polarity: 'retraction', retracted: true },
+                    ],
+                },
+            },
+        });
+        expect(block).toContain('予算 (Budget): partial ・ 直近: "予算は300万円くらい"');
+        expect(block).not.toContain('500万円');
+        expect(block).not.toContain('[manual]');
+    });
+
+    test('an element whose rows are all retracted carries no quote', () => {
+        const block = buildEvidenceBlock({
+            elements: { budget: { status: 'partial', evidence: [{ text: '予算は500万円です', retracted: true }] } },
+        });
+        expect(block).toContain('- 予算 (Budget): partial\n');
+        expect(block).not.toContain('500万円');
     });
 });

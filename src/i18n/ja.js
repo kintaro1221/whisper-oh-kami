@@ -26,11 +26,30 @@ const JA = {
 
     // ── CheatingDaddyApp ──
     'app.recording_consent.message':
-        '商談・ミーティングの音声を録音 / 文字起こしします。\n\n相手の参加者から事前合意を得ていますか？\n\n「OK」で開始 / 「キャンセル」で中止します。',
+        '商談・ミーティングの音声を録音 / 文字起こしします。\n\n相手の参加者から事前合意を得ていますか？\n\n同意する場合は「同意して開始」、しない場合は「キャンセル」を選んでください。',
+    'app.recording_consent.accept': '同意して開始',
+    'app.recording_consent.cancel': 'キャンセル',
+    // Pre-start constraint modal for the 検証中 modes (byok / local) — see
+    // CheatingDaddyApp#confirmExperimentalMode(). {mode} is replaced in the view.
+    'experimental.title': '{mode} は検証中の機能です',
+    'experimental.intro': '次の制約を理解したうえで開始してください。',
+    'experimental.byok.1': 'Gemini 2.5 系は Google が新規提供を終了しており、新しく作成した API キーでは動かない可能性があります。',
+    'experimental.byok.2': '5 要素バーは、Deepgram キーを入力し、設定 → 音声認識エンジン で「クラウド優先」を選んだときだけ動きます。',
+    'experimental.byok.3':
+        'システム音声（相手の声）は Gemini Live（Google、米国）に送信されます。「Deepgram を使わない」設定でもこれは変わりません。',
+    'experimental.local.1': '5 要素バーは動きません（助言の表示のみ）。',
+    'experimental.local.2': 'マイクとシステム音声を区別せずに文字起こしします。',
+    'experimental.local.3': 'Ollama のホストがこの PC 以外の場合、文字起こしがそのホストに送信されます。',
+    'experimental.accept': '制約を理解して開始',
+    'experimental.back': 'お試しモードに戻る',
     'app.live_bar.end_session': 'セッション終了',
     'app.live_bar.session_fallback': 'セッション',
     'app.live_bar.click_through': '[クリックスルー]',
     'app.live_bar.hide': '[非表示]',
+    // ライブバーの STT バッジの title（ホバー説明）。実際の音声の行き先と一致させる。
+    'app.live_bar.stt_badge.on_device': '音声は端末内で処理されます',
+    'app.live_bar.stt_badge.byok_local': 'Deepgram は未使用。相手の音声は Gemini Live に送信されます',
+    'app.live_bar.stt_badge.cloud': 'Deepgram（米国）で文字起こし。音声は Gemini Live にも送信されます',
     'app.window_control.hide_tooltip': '非表示 (Ctrl+\\)',
     'app.window_control.close_tooltip': '閉じる',
 
@@ -64,8 +83,8 @@ const JA = {
     'diagnostic.deepgram_disconnected.cause': 'Deepgram WebSocket が切断され、音声文字起こしが止まっている可能性があります。',
     'diagnostic.deepgram_disconnected.action': 'Deepgram キー、通信環境、音声入力設定を確認してから再開始してください。',
     'diagnostic.audio_helper_failed.title': 'システム音声ヘルパーを起動できませんでした',
-    'diagnostic.audio_helper_failed.cause': '音声キャプチャ用ヘルパーの起動、音声デバイス、または Windows WASAPI ループバックで失敗しました。',
-    'diagnostic.audio_helper_failed.action': 'マイク/スピーカーの既定デバイスを確認し、必要ならアプリを再起動してください。',
+    'diagnostic.audio_helper_failed.cause': '相手側の音声を Deepgram に送れないため、相手の文字起こしは Gemini Live に戻ります。',
+    'diagnostic.audio_helper_failed.action': 'アプリを再起動するか、設定 → 音声認識エンジン で「Deepgram を使わない」を選ぶと解消します。',
 
     // ── ヘッダー / view titles ──
     'header.title.onboarding': 'WhisperOhKAMI へようこそ',
@@ -91,8 +110,8 @@ const JA = {
     // {percent} {loaded} {total} are interpolated at the call site (t() has no built-in interpolation).
     'main.whisper.downloading_pct': 'Whisperモデルをダウンロード中… {percent}%（{loaded}/{total}MB）',
     'main.whisper.downloading': 'Whisperモデルを初回ダウンロード中です。',
-    'main.whisper.first_run_note': '初回のみWhisperモデルをダウンロードします。',
-    'main.whisper.auto_download_note': '初回利用時に自動でダウンロードされます。',
+    'main.whisper.first_run_note': 'Tiny / Small はインストーラに同梱済みでダウンロード不要です。高精度モデルのみ初回利用時にダウンロードします。',
+    'main.whisper.auto_download_note': '高精度モデルのみ初回利用時に自動でダウンロードされます（Tiny / Small は同梱済み）。',
     'main.whisper.error': 'Whisperモデルのダウンロードに失敗しました。通信環境とディスク空き容量を確認して再試行してください。',
     'main.button.retry': '再試行',
     'main.button.start_session': 'セッションを開始',
@@ -105,12 +124,13 @@ const JA = {
     'main.advanced.hint': '通常はこのままでOK',
     'main.advanced.accuracy_note': '文字起こしの精度をさらに上げたい場合は、「自前キー」モードで Deepgram のクラウド文字起こしを使えます。',
     'main.mode_card.selected': '選択中',
+    'main.mode_card.experimental_tag': '検証中',
     'main.mode_card.trial.title': 'お試し',
     'main.mode_card.trial.desc': 'キー不要',
     'main.mode_card.byok.title': '自前キー',
-    'main.mode_card.byok.desc': 'Geminiで応答',
+    'main.mode_card.byok.desc': 'Gemini で応答（検証中）',
     'main.mode_card.local.title': 'ローカルAI',
-    'main.mode_card.local.desc': 'Ollamaで実行',
+    'main.mode_card.local.desc': 'Ollama で実行（検証中）',
     'main.audio.mic_label': 'マイク',
     // {id} = 短縮 deviceId (8 文字)。permission 未許可で label が空のときの fallback。
     'main.audio.mic_label_fallback': 'マイク ({id})',
@@ -164,10 +184,10 @@ const JA = {
     'onboarding.mode.note': 'あとから設定でいつでも変更できます。',
     'onboarding.mode.trial.label': 'お試し（キー不要）',
     'onboarding.mode.trial.desc': 'すぐに試せます。マイク音声から5要素バーが動きます。AI 応答はありません。',
-    'onboarding.mode.byok.label': '自分の API キー（おすすめ）',
-    'onboarding.mode.byok.desc': 'Gemini キーを入れると AI 応答まで使えます。',
-    'onboarding.mode.local.label': 'ローカル（オフライン）',
-    'onboarding.mode.local.desc': 'Ollama で完全オフライン動作。外部送信ゼロ。',
+    'onboarding.mode.byok.label': '自分の API キー（検証中）',
+    'onboarding.mode.byok.desc': 'Gemini キーで AI 応答。2026-10 時点で新規作成のキーでは動かない可能性があり、検証中です。',
+    'onboarding.mode.local.label': 'ローカル（Ollama・検証中）',
+    'onboarding.mode.local.desc': 'Ollama で助言を生成。5 要素バーは未対応。Ollama がこの PC 上なら外部送信はありません。',
     'onboarding.slide2.skip_note': '未入力のまま「はじめる」で進められます（あとから設定できます）。',
     'onboarding.slide2.title': '補足情報を追加',
     'onboarding.slide2.body':
@@ -189,16 +209,29 @@ const JA = {
 
     // ── 設定: 音声認識エンジン ──
     'customize.stt.title': '音声認識エンジン',
-    'customize.stt.section_help':
-        '商談音声をどのエンジンで文字起こしするかを選びます。既定はプライバシー重視のローカル。クラウド（Deepgram）は任意で、BYOK 設定で Deepgram キーを入れると有効になります。',
+    'customize.stt.section_help': '相手の音声をどのエンジンで文字起こしするかを選びます。この設定は自前キー（Gemini）モードでのみ有効です。',
     'customize.stt.cloud.title': 'クラウド優先',
     'customize.stt.cloud.tag': '要 Deepgram キー',
     'customize.stt.cloud.help':
         'Deepgram nova-3 でリアルタイム文字起こし（任意）。BYOK 設定で Deepgram キーが必要です。マイク／スピーカー音声は Deepgram（米国）のサーバに送信されます。キーが無い場合は Gemini Live の文字起こしにフォールバックします。',
-    'customize.stt.local.title': 'ローカル完結',
-    'customize.stt.local.tag': '推奨',
+    'customize.stt.local.title': 'Deepgram を使わない',
+    'customize.stt.local.tag': '既定',
     'customize.stt.local.help':
-        'Deepgram への音声送信を停止します。注意: Gemini Live は依然マルチモーダル context として音声を受け取るため、完全ローカルではありません（README §倫理 / §STT モード参照）。完全ローカル化は次フェーズで対応。',
+        'Deepgram への音声送信を止めます。自前キー（Gemini）モードでは、相手の音声は引き続き Gemini Live（Google、米国）に送信されます。音声を端末外に出さないのは「お試し」と「ローカル」モードだけです。',
+
+    // ── 設定: Whisperモデル（端末内音声認識） ──
+    'customize.whisper.title': 'Whisperモデル（端末内）',
+    'customize.whisper.section_help':
+        'お試しモードとローカル（Ollama）モードで使う、端末内の音声認識モデルを選びます。Tiny / Small はインストーラに同梱済みでダウンロード不要。高精度モデルのみ初回利用時にダウンロードします。',
+    'customize.whisper.model_label': 'モデル',
+    'customize.whisper.model.tiny_name': 'Tiny（低スペックPC向け・同梱）',
+    'customize.whisper.model.tiny_help':
+        '最も軽量・高速ですが、日本語の精度は低めです。低スペックPCで重い場合に選んでください。ダウンロード不要（同梱済み）。',
+    'customize.whisper.model.small_name': 'Small（推奨・同梱）',
+    'customize.whisper.model.small_help': '速度と日本語精度のバランスが良い既定モデルです。ダウンロード不要（同梱済み）。',
+    'customize.whisper.model.kotoba_name': '高精度（日本語特化・要ダウンロード）',
+    'customize.whisper.model.kotoba_help':
+        '日本語特化の高精度モデルです。初回利用時に約1GBをダウンロードします。高性能PC向けで、低スペックCPUでは処理が遅くなる場合があります。',
 
     // ── 設定: 音声入力 ──
     'customize.audio.title': '音声入力',
@@ -234,7 +267,10 @@ const JA = {
     'customize.privacy.cleared_local': 'ローカルデータをすべて削除しました',
     'customize.privacy.quitting': 'アプリを終了します...',
     // {message} = JS Error.message。テンプレ内に展開する。
+    'customize.privacy.clear_failed': '一部のデータを削除できませんでした: {paths}',
     'customize.privacy.clear_error': 'データ削除エラー: {message}',
+    'customize.privacy.saved_data_help':
+        '商談ごとの文字起こし・AI の助言・画面分析の結果は、この PC の %APPDATA%\\whisper-oh-kami-config\\history に平文 JSON で保存されます。自動削除はありません。「すべてのデータを削除」は、この設定フォルダ全体（履歴・API キー・設定）と、旧バージョンの設定フォルダを削除します。Whisper モデルのキャッシュと、サポート用に書き出したファイルは削除されません。',
     'customize.support_export.button': 'サポート用に書き出す',
     'customize.support_export.exporting': '書き出し中...',
     'customize.support_export.success': 'サポート用診断を書き出しました: {path}',
@@ -294,9 +330,9 @@ const JA = {
     'help.faq.ollama_connection':
         'Ollama に接続できない → ローカル AI は Ollama の起動が必要です。ollama.com からインストールし、起動してからホスト設定を確認します。',
     'help.faq.whisper_download':
-        'Whisper モデルのダウンロードが終わらない／失敗する → 初回のみモデルを取得します。通信環境とディスク空き容量を確認し、表示される再試行で再開します。',
+        'Whisper モデルのダウンロードが終わらない／失敗する → Tiny / Small は同梱済みでダウンロード不要です。この表示が出るのは設定で高精度モデル（kotoba-whisper）を選んだ場合のみで、初回のみ約1GBを取得します。通信環境とディスク空き容量を確認し、表示される再試行で再開します。',
     'help.faq.audio_helper_failed':
-        'システム音声ヘルパーが起動しない（Windows） → 既定のマイク／スピーカーデバイスを確認し、必要ならアプリを再起動します。',
+        'システム音声ヘルパーが起動しない（Windows・Deepgram 利用時のみ） → 相手の文字起こしは Gemini Live に戻ります。アプリを再起動するか、設定 → 音声認識エンジン で「Deepgram を使わない」を選びます。',
     'help.faq.transcription_stopped': '文字起こしが止まった → 音声デバイス、ネットワーク、システム音声の設定を確認します。',
     'help.faq.shortcut_not_working': 'ショートカットが効かない → 下の登録状態で OS や他アプリとの衝突を確認します。',
     'help.section.license': 'ライセンス・オープンソース',
@@ -356,9 +392,19 @@ const JA = {
     'assistant.context.field.constraints': '制約',
     'assistant.context.field.free_instruction': '自由欄',
     'assistant.progress.title': 'ヒアリング進捗',
+    'assistant.progress.counts': '候補 {detected} / 確認 {confirmed} / 5',
+    'assistant.badge.detected_hint': '自動検出の候補。相手に確認したら ✓ を押してください',
+    'assistant.evidence.confirm': '相手に確認できた',
+    'assistant.evidence.retract': '取り消す',
+    'assistant.evidence.polarity.negated': '否定',
+    'assistant.evidence.polarity.hypothetical': '仮定',
+    'assistant.evidence.polarity.third_party': '他社',
+    'assistant.evidence.polarity.retraction': '撤回',
+    'assistant.evidence.retracted': '取消済',
     'assistant.help.discovery_start': 'まず相手の発言を待ち、課題とゴールを相手の言葉で確認します。',
     'assistant.help.discovery_gap': 'が未充足です。提案を急がず、事実確認の質問を1つだけ返します。',
     'assistant.help.discovery_complete': '5要素は一通り確認済みです。次アクション、合意条件、懸念点を短く整理します。',
+    'assistant.help.candidates_complete': '5要素の候補は出揃いました。未確認の候補は相手に一言確認してください。',
     'assistant.help.default': '必要に応じて「次の一手」を使い、画面分析は入力欄右のボタンで実行します。',
     'assistant.feedback.no_response': '保存できるAI提案がまだありません。',
     'assistant.feedback.session_not_ready': 'セッション履歴の準備中です。少し待ってから再度保存してください。',
@@ -369,7 +415,7 @@ const JA = {
     'assistant.rail.context_empty': 'AI コンテキスト画面で商材・顧客・商談ゴールを設定できます。',
     'assistant.rail.gaps_title': '不足している5要素',
     'assistant.rail.gaps_empty_profile': '営業・Discoveryプロファイルで5要素の不足を表示します。',
-    'assistant.rail.gaps_filled': '5要素は一通り埋まっています。',
+    'assistant.rail.gaps_filled': '5要素の候補が出揃っています',
     'assistant.rail.help_title': 'この場面で使えるヘルプ',
     'assistant.rail.feedback_title': 'この提案へのフィードバック',
     'assistant.rail.aria_label': '商談中ワークベンチ補助情報',
@@ -425,7 +471,7 @@ const JA = {
     // ── ローカル AI ヘルプ (MainView._renderLocalHelp) ──
     'local_ai_help.intro.title': 'Ollama とは？',
     'local_ai_help.intro.body':
-        'Ollama は大規模言語モデルをローカル PC で実行できるツールです。すべての処理が端末内で完結し、データが外部に送信されることはありません。',
+        'Ollama は大規模言語モデルをローカル PC で実行できるツールです。Ollama のホストがこの PC（既定 127.0.0.1）の場合、すべての処理が端末内で完結し、データが外部に送信されることはありません。',
     'local_ai_help.install.title': 'Ollama をインストール',
     'local_ai_help.install.before_link': '',
     'local_ai_help.install.after_link': ' からダウンロードしてインストールしてください。',
@@ -441,7 +487,8 @@ const JA = {
     'local_ai_help.thinking_warn':
         '「思考型」モデル（deepseek-r1、qwq など）は避けてください。ローカル推論は元々遅く、思考プロセスがあると応答までさらに時間がかかります。',
     'local_ai_help.whisper.title': 'Whisper',
-    'local_ai_help.whisper.body': '音声認識用の Whisper モデルは、初回セッション開始時に自動ダウンロードされます。ダウンロードは一度きりです。',
+    'local_ai_help.whisper.body':
+        '音声認識用の Whisper モデル（Tiny / Small）はインストーラに同梱済みで、ダウンロードは不要です。設定で高精度モデル（kotoba-whisper）を選んだ場合のみ、初回セッション開始時に約1GBを自動ダウンロードします（一度きり）。',
     'local_ai_help.slow.title': 'PC が重い・止まる場合',
     'local_ai_help.slow.body':
         'ローカル実行は RAM と CPU を多く消費します。動作が重くなる場合は LLM の負荷が原因の可能性が高いです。ホスティング型を使いたい場合は BYOK モードに切り替えてください。',

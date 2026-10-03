@@ -1,7 +1,7 @@
 {
     "name": "whisper-oh-kami",
     "productName": "WhisperOhKAMI",
-    "version": "0.7.1",
+    "version": "0.7.5",
     "description": "Real-time AI hearing copilot for B2B sales discovery — 商談ヒアリングのささやきの神",
     "main": "src/index.js",
     "scripts": {
@@ -15,7 +15,9 @@
         "build:logos": "node scripts/build-logos.js",
         "notices": "node scripts/generate-notices.js",
         "notices:check": "node scripts/generate-notices.js --fail-closed",
-        "paid-release": "node scripts/build-paid-release.mjs"
+        "paid-release": "node scripts/build-paid-release.mjs",
+        "whisper-models": "node scripts/fetch-whisper-models.mjs",
+        "whisper-models:check": "node scripts/fetch-whisper-models.mjs --check"
     },
     "keywords": [
         "ai-sales-assistant",
@@ -40,6 +42,10 @@
     "engines": {
         "node": ">=22.12.0"
     },
+    "overrides": {
+        "adm-zip": "^0.6.0",
+        "sharp": "^0.35.4"
+    },
     "devDependencies": {
         "@electron-forge/cli": "^7.11.0",
         "@electron-forge/maker-deb": "^7.11.0",
@@ -54,6 +60,7 @@
         "electron": "^42.0.0",
         "jest": "^29.7.0",
         "png2icons": "^2.0.1",
-        "sharp": "^0.34.5"
+        "sharp": "^0.35.4",
+        "tar": "7.5.22"
     }
 }

@@ -319,7 +319,7 @@ export class MainView extends LitElement {
             }
             .whisper-bar--indeterminate .whisper-bar__fill {
                 /* motion を切るユーザーには 100% 塗り=「完了」に誤読されるため、
-                   状態不明を表す静的な部分塗り(muted)にする（codex 指摘 P3） */
+                   状態不明を表す静的な部分塗り(muted)にする */
                 animation: none;
                 width: 40%;
                 opacity: 0.65;
@@ -510,6 +510,20 @@ export class MainView extends LitElement {
             padding: 1px 7px;
             border-radius: 999px;
             white-space: nowrap;
+        }
+
+        /* 検証中 tag on the byok / local cards. Same pill shape as .mode-badge,
+           but inline (the selected badge already owns the top-center slot). */
+        .mode-card-tag {
+            align-self: center;
+            border: 1px solid var(--warning);
+            color: var(--warning);
+            font-size: 10px;
+            font-weight: var(--font-weight-medium);
+            padding: 0 7px;
+            border-radius: 999px;
+            white-space: nowrap;
+            line-height: 1.6;
         }
 
         /* ── Reassurance rows (trial: "what happens when you start") ── */
@@ -786,7 +800,7 @@ export class MainView extends LitElement {
         this._showLocalHelp = false;
         this._ollamaHost = 'http://127.0.0.1:11434';
         this._ollamaModel = 'gemma3:4b';
-        this._whisperModel = 'Xenova/whisper-tiny';
+        this._whisperModel = 'Xenova/whisper-small';
         this._audioDevices = [];
         this._micDeviceId = '';
         this._systemDeviceId = 'auto';
@@ -821,7 +835,7 @@ export class MainView extends LitElement {
             // Load local AI settings
             this._ollamaHost = prefs.ollamaHost || 'http://127.0.0.1:11434';
             this._ollamaModel = prefs.ollamaModel || 'gemma3:4b';
-            this._whisperModel = prefs.whisperModel || 'Xenova/whisper-tiny';
+            this._whisperModel = prefs.whisperModel || 'Xenova/whisper-small';
 
             // Load saved mic / system audio selection (validated in _enumerateDevices)
             this._micDeviceId = prefs.micDeviceId || '';
@@ -1230,9 +1244,9 @@ export class MainView extends LitElement {
     // Visible self-select cards (was buried text-links). Reuses .mode-card CSS.
     _renderModeCards() {
         const cards = [
-            { mode: 'trial', title: t('main.mode_card.trial.title'), desc: t('main.mode_card.trial.desc') },
-            { mode: 'byok', title: t('main.mode_card.byok.title'), desc: t('main.mode_card.byok.desc') },
-            { mode: 'local', title: t('main.mode_card.local.title'), desc: t('main.mode_card.local.desc') },
+            { mode: 'trial', title: t('main.mode_card.trial.title'), desc: t('main.mode_card.trial.desc'), experimental: false },
+            { mode: 'byok', title: t('main.mode_card.byok.title'), desc: t('main.mode_card.byok.desc'), experimental: true },
+            { mode: 'local', title: t('main.mode_card.local.title'), desc: t('main.mode_card.local.desc'), experimental: true },
         ];
         return html`
             <div class="mode-cards" role="radiogroup" aria-label=${t('main.divider.choose_mode')}>
@@ -1247,6 +1261,7 @@ export class MainView extends LitElement {
                         >
                             ${this._mode === card.mode ? html`<span class="mode-badge">${t('main.mode_card.selected')}</span>` : ''}
                             <span class="mode-card-title">${card.title}</span>
+                            ${card.experimental ? html`<span class="mode-card-tag">${t('main.mode_card.experimental_tag')}</span>` : ''}
                             <span class="mode-card-desc">${card.desc}</span>
                         </button>
                     `
@@ -1375,18 +1390,20 @@ export class MainView extends LitElement {
             </div>
 
             ${this._renderStartButton()} ${this._renderAdvanced('byok')} ${this._renderDivider()} ${this._renderModeCards()}
-            ${this._wizardOpen
-                ? html`<key-wizard
-                      .geminiKey=${this._geminiKey}
-                      .deepgramKey=${this._deepgramKey}
-                      .onExternalLink=${this.onExternalLink}
-                      @key-entered=${this._onWizardKeyEntered}
-                      @wizard-close=${() => {
-                          this._wizardOpen = false;
-                          this.requestUpdate();
-                      }}
-                  ></key-wizard>`
-                : ''}
+            ${
+                this._wizardOpen
+                    ? html`<key-wizard
+                          .geminiKey=${this._geminiKey}
+                          .deepgramKey=${this._deepgramKey}
+                          .onExternalLink=${this.onExternalLink}
+                          @key-entered=${this._onWizardKeyEntered}
+                          @wizard-close=${() => {
+                              this._wizardOpen = false;
+                              this.requestUpdate();
+                          }}
+                      ></key-wizard>`
+                    : ''
+            }
         `;
     }
 
@@ -1444,16 +1461,18 @@ export class MainView extends LitElement {
                 <!-- Stable frame: brand + value line never shift with mode. -->
                 <div class="title-row">
                     <div class="page-title">${brandMark(22)} <span>WhisperOhKAMI</span></div>
-                    ${this._mode === 'local'
-                        ? html`<button
-                              class="help-btn"
-                              @click=${() => {
-                                  this._showLocalHelp = !this._showLocalHelp;
-                              }}
-                          >
-                              ${this._showLocalHelp ? closeIcon : helpIcon}
-                          </button>`
-                        : ''}
+                    ${
+                        this._mode === 'local'
+                            ? html`<button
+                                  class="help-btn"
+                                  @click=${() => {
+                                      this._showLocalHelp = !this._showLocalHelp;
+                                  }}
+                              >
+                                  ${this._showLocalHelp ? closeIcon : helpIcon}
+                              </button>`
+                            : ''
+                    }
                 </div>
                 <div class="page-subtitle">${t('main.subtitle.app')}</div>
 

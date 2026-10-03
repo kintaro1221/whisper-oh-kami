@@ -4,3 +4,5 @@ native/**/target/
 out/
 .webpack/
 coverage/
+# Generated from verbatim upstream license texts; regenerate with npm run notices.
+THIRD_PARTY_NOTICES.md

@@ -43,6 +43,8 @@
 # Version control config
 .gitignore text eol=lf
 .gitattributes text eol=lf
+# Preserve upstream license whitespace in the generated notice document.
+THIRD_PARTY_NOTICES.md whitespace=-blank-at-eol,-space-before-tab
 
 # ---------------------------------------------------------------------------
 # export-ignore — paid-release source.zip / public-mirror exclusions
@@ -51,7 +53,9 @@
 # and by any `git archive`-based export to the public mirror repo) omits any
 # path marked `export-ignore` below. These are internal-only artifacts that
 # must NOT reach buyers or the public repo: dated internal handoff/meeting
-# notes, agent-workflow instructions, hidden-launcher scripts, and the
+# notes, agent-workflow instructions (AGENTS.md / CLAUDE.md / the entire
+# .claude/ harness of release-audit agents + skills), hidden-launcher
+# scripts, and the
 # operations/superpowers/decisions/legal-closure-ledger docs trees, plus the
 # entire lp/ payment-infrastructure source (Astro LP + Cloudflare Pages
 # Functions — server-side infra the operator runs, not part of the
@@ -62,10 +66,25 @@
 HANDOFF_2026-05-*.md export-ignore
 GATE1_PRE_MEETING.md export-ignore
 AGENTS.md export-ignore
+CLAUDE.md export-ignore
+.claude/ export-ignore
 start.bat export-ignore
 start-hidden.vbs export-ignore
 docs/operations/ export-ignore
 docs/superpowers/ export-ignore
 docs/decisions/ export-ignore
 docs/legal/REVIEW-NOTES.md export-ignore
+# Free-phase exclusions (2026-10-03): while the product is distributed for
+# free the sales-only disclosures (price / refund / 特商法) and the internal
+# legal index that describes the paid flow stay out of the public mirror and
+# source.zip. privacy-policy / recording-guidance / data-flow-matrix remain.
+docs/legal/tokushoho.md export-ignore
+docs/legal/terms-and-sales.md export-ignore
+docs/legal/README.md export-ignore
+# Tests that read export-ignored trees (lp/, docs/operations/, the sales legal
+# docs) cannot pass in the exported tree, so they are exported with it.
+tests/unit/paidBetaLpContract.test.js export-ignore
+tests/unit/paidCloudflareConfig.test.js export-ignore
+tests/unit/paidLegalContract.test.js export-ignore
+tests/unit/paidReleaseBundle.test.js export-ignore
 lp/ export-ignore

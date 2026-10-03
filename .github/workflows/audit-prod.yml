@@ -1,12 +1,10 @@
 name: audit-prod
 
-# B1 acceptance gate (docs/launch/npm-audit-triage.md "Soft gate"):
-# Runtime npm dependencies must report 0 critical and 0 high
-# advisories. devDependencies (Electron toolchain) are intentionally
-# OUT of scope here — they are tracked separately for B1 Electron 42
-# upgrade. The qualifier "Runtime npm dependencies (--omit=dev): 0 /
-# Full build/test dependency tree: 54 findings" comes from codex
-# Track A round-5 verify §1.
+# Release gate: runtime npm dependencies must report 0 critical and 0
+# high advisories. devDependencies (the Electron build toolchain) are
+# intentionally OUT of scope here — they do not ship inside the
+# installed app, and their advisories are reviewed separately rather
+# than blocking every build.
 #
 # We use `--audit-level=high` so the gate fires on critical+high
 # but lets moderate/low through (those are tracked manually).
@@ -18,12 +16,11 @@ name: audit-prod
 # runs. That is intentional — silence on a known critical is worse
 # than churn.
 #
-# Self-review (workflow wf_32ebedb1-58d) added:
-#   - forge.config.js + .npmrc + npm-shrinkwrap.json to `paths`
-#   - permissions / timeout-minutes / concurrency hardening
-#   - `npm audit --json | jq` for a reliable step-summary count
-#     (the previous `npm audit 2>&1 | tail -1` captured a hint
-#     line, not the breakdown)
+# The `paths` filter also covers forge.config.js / .npmrc /
+# npm-shrinkwrap.json, since any of those can change what actually
+# ships. The step summary parses `npm audit --json` rather than
+# tailing human-readable output, which used to capture a hint line
+# instead of the vulnerability breakdown.
 
 on:
   pull_request:
@@ -72,16 +69,13 @@ jobs:
       - name: Audit runtime production dependencies (fail on critical/high)
         run: npm audit --omit=dev --audit-level=high
 
-      # Codex round-6 verify P1-1: render the full-tree audit count
-      # breakdown via Node's JSON parser instead of `jq` + a
-      # generic-`tail` fallback. The `tail -3` fallback in the
-      # previous revision captured `npm audit`'s hint line ("Some
-      # issues need review, ...") instead of any count summary, so
-      # the step summary was effectively empty whenever jq was
-      # absent. Using `node` here ensures the breakdown is rendered
-      # on any runner Node 20+ ships on (which includes
-      # ubuntu-latest as well as any custom runner) and removes the
-      # silent-fallback failure mode entirely.
+      # Render the full-tree audit count breakdown with Node's JSON
+      # parser rather than `jq` plus a `tail` fallback: that fallback
+      # captured npm audit's hint line ("Some issues need review,
+      # ...") instead of any count summary, so the step summary was
+      # effectively empty whenever jq was absent. Using `node` keeps
+      # the breakdown working on any runner shipping Node 20+ and
+      # removes the silent-fallback failure mode.
       - name: Record full-tree audit summary (informational, never fails)
         if: always()
         shell: bash
@@ -107,7 +101,7 @@ jobs:
               : '{ "error": "could not parse `npm audit --json` output" }',
             '```',
             '',
-            '(devDependencies / Electron toolchain advisories are tracked in docs/launch/npm-audit-triage.md, not blocked here. Re-evaluate when Electron 42 + Forge 7.11 land in B1.)',
+            '(devDependencies / Electron toolchain advisories are reviewed separately and are not blocked here.)',
           ];
           process.stdout.write(lines.join('\n') + '\n');
           NODE

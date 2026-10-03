@@ -15,6 +15,29 @@ const EN = {
     'common.click_through': 'click-through',
     'common.dismiss': 'Dismiss',
 
+    // ── CheatingDaddyApp ──
+    // app.recording_consent.message is intentionally ja-only (see
+    // src/i18n/__tests__/index.test.js) — it degrades to Japanese via the
+    // ja-primary fallback rather than being duplicated here.
+    'app.recording_consent.accept': 'Agree and start',
+    'app.recording_consent.cancel': 'Cancel',
+    // Live-bar STT badge hover text. Must match where the audio actually goes.
+    'app.live_bar.stt_badge.on_device': 'Audio is processed on this PC',
+    'app.live_bar.stt_badge.byok_local': "Deepgram is not used. The counterpart's audio is sent to Gemini Live",
+    'app.live_bar.stt_badge.cloud': 'Transcribed by Deepgram (US). Audio is also sent to Gemini Live',
+    'experimental.title': '{mode} is still being verified',
+    'experimental.intro': 'Please make sure you understand these constraints before starting.',
+    'experimental.byok.1': 'Google no longer offers the Gemini 2.5 series to new users, so a newly created API key may not work.',
+    'experimental.byok.2':
+        'The 5-element bar only moves when a Deepgram key is entered and "Cloud Speed" is selected under Settings → Speech recognition engine.',
+    'experimental.byok.3':
+        'System audio (the other party’s voice) is sent to Gemini Live (Google, US). This still applies when Deepgram is turned off.',
+    'experimental.local.1': 'The 5-element bar does not move (advice only).',
+    'experimental.local.2': 'Mic and system audio are transcribed without telling them apart.',
+    'experimental.local.3': 'If the Ollama host is not this PC, transcripts are sent to that host.',
+    'experimental.accept': 'I understand, start',
+    'experimental.back': 'Back to trial mode',
+
     'diagnostic.byok_missing_key.title': 'Gemini API key is missing',
     'diagnostic.byok_missing_key.cause': 'BYOK mode needs a Gemini API key before a session can start.',
     'diagnostic.byok_missing_key.action': 'Create a Gemini key and paste it into the key field.',
@@ -43,8 +66,8 @@ const EN = {
     'diagnostic.deepgram_disconnected.cause': 'The Deepgram WebSocket disconnected, so speech-to-text may have stopped.',
     'diagnostic.deepgram_disconnected.action': 'Check the Deepgram key, network, and audio input settings, then restart the session.',
     'diagnostic.audio_helper_failed.title': 'Could not start the system-audio helper',
-    'diagnostic.audio_helper_failed.cause': 'The audio-capture helper, the audio device, or Windows WASAPI loopback failed to start.',
-    'diagnostic.audio_helper_failed.action': 'Check the default microphone/speaker device and restart the app if needed.',
+    'diagnostic.audio_helper_failed.cause': "The counterpart's audio cannot be sent to Deepgram, so their transcription falls back to Gemini Live.",
+    'diagnostic.audio_helper_failed.action': 'Restart the app, or choose "Don\'t use Deepgram" under Settings → Speech recognition engine.',
 
     'header.title.onboarding': 'Welcome to WhisperOhKAMI',
     'header.title.main': 'WhisperOhKAMI',
@@ -68,8 +91,9 @@ const EN = {
     // {percent} {loaded} {total} are interpolated at the call site (t() has no built-in interpolation).
     'main.whisper.downloading_pct': 'Downloading the Whisper model… {percent}% ({loaded}/{total} MB)',
     'main.whisper.downloading': 'Downloading the Whisper model for the first time…',
-    'main.whisper.first_run_note': 'The Whisper model is downloaded only on first use.',
-    'main.whisper.auto_download_note': 'Downloaded automatically on first use.',
+    'main.whisper.first_run_note':
+        'Tiny / Small ship bundled with the installer — no download needed. Only the high-accuracy model downloads on first use.',
+    'main.whisper.auto_download_note': 'Only the high-accuracy model downloads automatically on first use (Tiny / Small are bundled).',
     'main.whisper.error': 'Failed to download the Whisper model. Check your connection and free disk space, then retry.',
     'main.button.retry': 'Retry',
     'main.button.start_session': 'Start Session',
@@ -82,12 +106,13 @@ const EN = {
     'main.advanced.hint': 'Usually fine as-is',
     'main.advanced.accuracy_note': 'For higher transcription accuracy, switch to "Your key" mode and use Deepgram cloud transcription.',
     'main.mode_card.selected': 'Selected',
+    'main.mode_card.experimental_tag': 'Beta',
     'main.mode_card.trial.title': 'Trial',
     'main.mode_card.trial.desc': 'No key',
     'main.mode_card.byok.title': 'Your key',
-    'main.mode_card.byok.desc': 'Gemini replies',
+    'main.mode_card.byok.desc': 'Gemini replies (beta)',
     'main.mode_card.local.title': 'Local AI',
-    'main.mode_card.local.desc': 'Runs on Ollama',
+    'main.mode_card.local.desc': 'Runs on Ollama (beta)',
     'main.audio.mic_label': 'Microphone',
     // {id} = short deviceId (8 chars). Fallback label when mic permission
     // hasn't been granted and the underlying label string is empty.
@@ -121,10 +146,10 @@ const EN = {
     'onboarding.mode.note': 'You can change this anytime in settings.',
     'onboarding.mode.trial.label': 'Trial (no key required)',
     'onboarding.mode.trial.desc': 'Start right away. The 5-element bar reacts to your mic. No AI replies.',
-    'onboarding.mode.byok.label': 'Your API key (recommended)',
-    'onboarding.mode.byok.desc': 'Add a Gemini key to also get AI replies.',
-    'onboarding.mode.local.label': 'Local (offline)',
-    'onboarding.mode.local.desc': 'Fully offline with Ollama. Zero outbound data.',
+    'onboarding.mode.byok.label': 'Your API key (beta)',
+    'onboarding.mode.byok.desc': 'AI replies with a Gemini key. As of 2026-10, newly created keys may not work; still being verified.',
+    'onboarding.mode.local.label': 'Local (Ollama, beta)',
+    'onboarding.mode.local.desc': 'Advice generated by Ollama. The 5-element bar is not supported. Nothing leaves this PC if Ollama runs here.',
     'onboarding.slide2.skip_note': 'You can press Get Started without filling this in (add it later).',
     'onboarding.slide2.title': 'Add context',
     'onboarding.slide2.body': 'Paste your resume or any info the AI should know. You can skip this and add it later.',
@@ -138,20 +163,45 @@ const EN = {
     'assistant.tooltip.next_response': 'Next response',
     'assistant.empty.waiting_audio': 'Waiting for audio...',
     'assistant.input.placeholder': 'Type a message...',
+    'assistant.rail.gaps_filled': 'All five candidates are in',
+    'assistant.progress.title': 'Discovery progress',
+    'assistant.progress.counts': 'Candidates {detected} / Confirmed {confirmed} / 5',
+    'assistant.badge.detected_hint': 'Auto-detected candidate. Press ✓ once the customer confirms it',
+    'assistant.evidence.confirm': 'Customer confirmed',
+    'assistant.evidence.retract': 'Retract',
+    'assistant.evidence.polarity.negated': 'negated',
+    'assistant.evidence.polarity.hypothetical': 'hypothetical',
+    'assistant.evidence.polarity.third_party': 'third party',
+    'assistant.evidence.polarity.retraction': 'retracted',
+    'assistant.evidence.retracted': 'retracted',
+    'assistant.help.candidates_complete': 'All five candidates are in. Confirm the unverified ones with the customer.',
 
     'customize.page.title': 'Settings',
 
     'customize.stt.title': 'Speech recognition engine',
-    'customize.stt.section_help':
-        'Choose the engine that transcribes call audio. Local (privacy) is the default; cloud (Deepgram) is optional and needs a Deepgram key entered in BYOK setup.',
+    'customize.stt.section_help': "Choose which engine transcribes the counterpart's audio. This setting only applies in your-key (Gemini) mode.",
     'customize.stt.cloud.title': 'Cloud Speed',
     'customize.stt.cloud.tag': 'Needs key',
     'customize.stt.cloud.help':
         'Real-time transcription via Deepgram nova-3 (optional). Needs a Deepgram key entered in BYOK setup; mic / speaker audio is sent to Deepgram (US) servers. With no key it falls back to Gemini Live transcription.',
-    'customize.stt.local.title': 'Local Privacy',
-    'customize.stt.local.tag': 'Recommended',
+    'customize.stt.local.title': "Don't use Deepgram",
+    'customize.stt.local.tag': 'Default',
     'customize.stt.local.help':
-        'Stops sending audio to Deepgram. Note: Gemini Live still receives audio as multimodal context, so this is not fully local (see README §Ethics / §STT modes). Full-local support is planned for a later phase.',
+        "Stops sending audio to Deepgram. In your-key (Gemini) mode, the counterpart's audio is still sent to Gemini Live (Google, US). Only Trial and Local modes keep audio on this PC.",
+
+    'customize.whisper.title': 'Whisper model (on-device)',
+    'customize.whisper.section_help':
+        'Choose the on-device speech recognition model used in Trial mode and Local (Ollama) mode. Tiny / Small ship bundled with the installer — no download needed. Only the high-accuracy model downloads on first use.',
+    'customize.whisper.model_label': 'Model',
+    'customize.whisper.model.tiny_name': 'Tiny (low-spec PCs — bundled)',
+    'customize.whisper.model.tiny_help':
+        'Fastest and lightest, but lower Japanese accuracy. Pick this if Small is too slow on your PC. No download needed — bundled with the installer.',
+    'customize.whisper.model.small_name': 'Small (recommended — bundled)',
+    'customize.whisper.model.small_help':
+        'The default: a good balance of speed and Japanese accuracy. No download needed — bundled with the installer.',
+    'customize.whisper.model.kotoba_name': 'High accuracy (Japanese-specialized — downloads on first use)',
+    'customize.whisper.model.kotoba_help':
+        'A Japanese-specialized, high-accuracy model. Downloads about 1GB on first use. Best for high-performance PCs — may be slow on low-spec CPUs.',
 
     'customize.audio.title': 'Audio input',
     'customize.audio.mode_label': 'Audio mode',
@@ -182,7 +232,10 @@ const EN = {
     'customize.privacy.cleared_local': 'All local data has been cleared',
     'customize.privacy.quitting': 'Quitting the app...',
     // {message} = JS Error.message; substituted by the caller.
+    'customize.privacy.clear_failed': 'Some data could not be deleted: {paths}',
     'customize.privacy.clear_error': 'Clear data error: {message}',
+    'customize.privacy.saved_data_help':
+        'Per-session transcripts, AI advice and screen-analysis results are saved on this PC as plain JSON in %APPDATA%\\whisper-oh-kami-config\\history. Nothing is deleted automatically. "Clear all data" deletes this whole settings folder (history, API keys, settings) and the previous version\'s settings folder. The Whisper model cache and files you exported for support are not deleted.',
     'customize.support_export.button': 'Export for support',
     'customize.support_export.exporting': 'Exporting...',
     'customize.support_export.success': 'Support diagnostics exported: {path}',
@@ -213,6 +266,12 @@ const EN = {
     'help.shortcut.next_response': 'Next Response',
     'help.shortcut.scroll_up': 'Scroll Response Up',
     'help.shortcut.scroll_down': 'Scroll Response Down',
+    'help.section.license': 'License & Open Source',
+    'help.license.gpl_notice':
+        'This app is open-source software provided under GPL-3.0. The full license text is included in the bundled LICENSE file.',
+    'help.license.fork_notice': "This is a fork of sohzm/cheating-daddy. The original project's copyright notices are respected.",
+    'help.license.font_notice': 'The bundled font (Noto Sans JP) is provided under the SIL Open Font License 1.1.',
+    'help.license.packages_notice': 'The list of bundled open-source packages and their licenses is provided in THIRD_PARTY_NOTICES.md.',
 
     // ── HistoryView ──
     'history.title': 'History',
@@ -245,7 +304,7 @@ const EN = {
     // ── Local AI help (MainView._renderLocalHelp) ──
     'local_ai_help.intro.title': 'What is Ollama?',
     'local_ai_help.intro.body':
-        'Ollama lets you run large language models locally on your machine. Everything stays on your computer — no data leaves your device.',
+        'Ollama lets you run large language models locally on your machine. When the Ollama host is this PC (default 127.0.0.1), everything stays on your computer — no data leaves your device.',
     'local_ai_help.install.title': 'Install Ollama',
     'local_ai_help.install.before_link': 'Download from ',
     'local_ai_help.install.after_link': ' and install it.',
@@ -261,7 +320,7 @@ const EN = {
         'Avoid "thinking" models (e.g. deepseek-r1, qwq). Local inference is already slower — a thinking model adds extra delay before responding.',
     'local_ai_help.whisper.title': 'Whisper',
     'local_ai_help.whisper.body':
-        'The Whisper speech-to-text model is downloaded automatically the first time you start a session. This is a one-time download.',
+        'The Whisper speech-to-text models (Tiny / Small) ship bundled with the installer — no download needed. Only the high-accuracy model (kotoba-whisper) downloads automatically (about 1GB, one-time) if you select it in Settings.',
     'local_ai_help.slow.title': 'Computer hanging or slow?',
     'local_ai_help.slow.body':
         "Running models locally uses a lot of RAM and CPU. If your computer slows down or freezes, it's likely the LLM. Switch back to BYOK mode if you want to use a hosted provider instead.",

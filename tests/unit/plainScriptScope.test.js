@@ -17,7 +17,13 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const PLAIN_SCRIPT_FILES = ['src/utils/evidenceInspector.js', 'src/utils/discoveryPhase.js', 'src/utils/whisperBarState.js'];
+const PLAIN_SCRIPT_FILES = [
+    'src/utils/evidenceInspector.js',
+    'src/utils/discoveryPhase.js',
+    'src/utils/whisperBarState.js',
+    'src/utils/recordingConsentGate.js',
+    'src/utils/audioHelperPolicy.js',
+];
 
 function readPlainScript(relPath) {
     return fs.readFileSync(path.join(__dirname, '..', '..', relPath), 'utf8');
@@ -37,5 +43,7 @@ describe('plain-script UMD files in index.html', () => {
         expect(context.window.evidenceInspector).toEqual(expect.objectContaining({ formatRelativeTime: expect.any(Function) }));
         expect(context.window.discoveryPhase).toEqual(expect.objectContaining({ computeDiscoveryPhase: expect.any(Function) }));
         expect(typeof context.window.whisperBarState).toBe('function');
+        expect(typeof context.window.RecordingConsentGate).toBe('function');
+        expect(context.window.audioHelperPolicy).toEqual(expect.objectContaining({ shouldStartAudioHelper: expect.any(Function) }));
     });
 });

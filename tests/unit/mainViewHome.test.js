@@ -67,7 +67,7 @@ describe('MainView home redesign (zero-friction default, progressive disclosure,
     test('Whisper DL中は進捗バー（role=progressbar + aria-valuenow + aria-label + .whisper-bar）で描画', () => {
         expect(mv).toMatch(/role="progressbar"/);
         expect(mv).toMatch(/aria-valuenow/);
-        expect(mv).toMatch(/aria-label=/); // progressbar に accessible name（codex P3）
+        expect(mv).toMatch(/aria-label=/); // progressbar に accessible name
         expect(mv).toMatch(/whisper-bar/);
     });
 

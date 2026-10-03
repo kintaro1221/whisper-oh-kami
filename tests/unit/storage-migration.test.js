@@ -1,6 +1,6 @@
 // Phase 0 rebrand (cheating-daddy → WhisperOhKAMI, 2026-05-10).
 //
-// Scope: cover the two correctness invariants Codex flagged as risky.
+// Scope: cover the two correctness invariants most at risk of regressing.
 //   1. Migration runs BEFORE needsReset() — so an existing user's data
 //      survives the rename instead of being wiped by resetConfigDir().
 //   2. The legacy dir is preserved (not deleted) so the user can manually
@@ -160,7 +160,7 @@ describe('storage config dir naming', () => {
 });
 
 // ---------------------------------------------------------------------------
-// initializeStorage() ordering invariant (regression test for Codex feedback)
+// initializeStorage() ordering invariant (regression test)
 //
 // _migrateBetween() tests above prove the copy logic in isolation. This block
 // proves the *call order* in initializeStorage(): migrate must run BEFORE

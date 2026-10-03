@@ -68,8 +68,8 @@ describe('AssistantView i18n extraction', () => {
         });
     });
 
-    // ── codex P2: 未確認 fallback も i18n 化（取りこぼし回帰防止）──
-    describe('codex P2: unconfirmed fallback is i18n', () => {
+    // ── 未確認 fallback も i18n 化（取りこぼし回帰防止）──
+    describe('unconfirmed fallback is i18n', () => {
         test('ja.js has assistant.evidence.unconfirmed', () => {
             expect(ja).toMatch(/'assistant\.evidence\.unconfirmed'/);
         });

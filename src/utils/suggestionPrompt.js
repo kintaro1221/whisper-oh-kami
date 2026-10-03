@@ -33,9 +33,11 @@ function resolveSuggestionProfile(profile) {
 // rules baked into the system prompt (prompts.js #会話の優先順位).
 //
 // Status comes verbatim from discoveryEvidenceStore.getState():
-//   - 'empty'   → label only
-//   - 'partial' → label + most recent quote (truncated to 40 chars)
-//   - 'filled'  → label + most recent quote (truncated to 40 chars)
+//   - 'empty'     → label only
+//   - 'partial'   → label + most recent quote (truncated to 40 chars)
+//   - 'detected'  → label + most recent quote (auto-detected candidate,
+//                   not yet confirmed with the customer)
+//   - 'confirmed' → label + most recent quote (the user confirmed it)
 //
 // The trailing instruction is intentionally minimal — eventKind-specific
 // output shaping ("返答候補" vs "次に聞くとよいこと", forbidden sections on
@@ -48,7 +50,7 @@ function resolveSuggestionProfile(profile) {
 // "drive the suggestion" to "background quality indicator". Surfacing
 // rules (when to put a BANT residual in 第1項目) live in the system
 // prompt — this block just hands the model the measured values and
-// reminds it not to repeat-question filled elements. Pre-2.D wording
+// reminds it not to repeat-question confirmed elements. Pre-2.D wording
 // said "第1項目は empty/partial から選べ" which combined with the system
 // prompt's now-removed "BANT 厳守" rule to over-prioritize budget /
 // decision-maker / timeline questions during normal pain-探り flow.
@@ -69,7 +71,9 @@ function buildEvidenceBlock(evidenceState) {
         const status = (el && el.status) || 'empty';
         const [jp, bant] = EVIDENCE_LABELS[key];
         if (status === 'empty') return `- ${jp} (${bant}): empty`;
-        const evList = (el && el.evidence) || [];
+        // Retracted rows (incl. the user's manual retraction marker) are history,
+        // not the current value — quote only the newest live row.
+        const evList = ((el && el.evidence) || []).filter(e => !e.retracted);
         const lastQuote = evList.length > 0 ? evList[evList.length - 1].text : '';
         const snippet = lastQuote ? ` ・ 直近: "${lastQuote.slice(0, EVIDENCE_QUOTE_MAX)}"` : '';
         return `- ${jp} (${bant}): ${status}${snippet}`;
@@ -78,8 +82,9 @@ function buildEvidenceBlock(evidenceState) {
         `# ヒアリング進捗 (5要素 / BANT 実測、背景チェック指標)\n` +
         lines.join('\n') +
         `\n→ 5要素 / BANT は会話品質を測る背景チェック。通常は会話の流れを最優先し、` +
-        `filled 要素の重複質問だけ避ける。自分が解決策提示済 / 相手が BANT 関連表現 (予算・決裁・期限等) ` +
-        `に触れた / 次アクションへ進む段階でだけ、未確認要素を「次に聞くとよいこと」に自然に補う。\n\n`
+        `confirmed 要素の重複質問だけ避ける。detected は候補であり未確認なので、自然な流れで一言確認する質問を混ぜてよい。` +
+        `自分が解決策提示済 / 相手が BANT 関連表現 (予算・決裁・期限等) に触れた / 次アクションへ進む段階でだけ、` +
+        `未確認要素を「次に聞くとよいこと」に自然に補う。\n\n`
     );
 }
 

@@ -37,7 +37,8 @@ const ELEMENT_LABELS = {
 const STATUS_LABELS = {
     empty: '未確認',
     partial: '探り中',
-    filled: '確認済',
+    detected: '候補あり（未確認）',
+    confirmed: '確認済み',
 };
 
 function getElementMeta(key) {
@@ -52,6 +53,7 @@ function getElementMeta(key) {
 function getSourceMeta(source) {
     if (source === 'regex') return { icon: '🔍', label: 'keyword' };
     if (source === 'llm') return { icon: '✨', label: 'LLM refine' };
+    if (source === 'user') return { icon: '👤', label: '手動' };
     return { icon: '·', label: '' };
 }
 

@@ -405,8 +405,8 @@ function setupStorageIpcHandlers() {
     // ============ CLEAR ALL ============
     ipcMain.handle('storage:clear-all', async () => {
         try {
-            storage.clearAllData();
-            return { success: true };
+            const result = storage.clearAllData();
+            return { success: !!(result && result.success), failed: (result && result.failed) || [] };
         } catch (error) {
             console.error('Error clearing all data:', error);
             return { success: false, error: error.message };

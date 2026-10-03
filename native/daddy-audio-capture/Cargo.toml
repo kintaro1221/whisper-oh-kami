@@ -3,7 +3,7 @@ name = "daddy-audio-capture"
 version = "0.1.0"
 edition = "2024"
 
-# Phase 1g-3.7 native helper: bundled WASAPI loopback capture for cheating-daddy.
+# Phase 1g-3.7 native helper: bundled WASAPI loopback capture for WhisperOhKAMI.
 # v1 captures the default render endpoint and writes raw PCM to stdout. Phase B
 # Step 2+ adds rubato resampling, structured stderr logs, --owner-pid parent
 # liveness polling, and --watch-default endpoint reopen.
@@ -13,9 +13,9 @@ wasapi = "0.23"
 # rubato 0.16.x is the last release with the plain Vec-based FftFixedInOut
 # API. v1.0+ / v2.0+ moved to an Adapter pattern (audioadapter crate) which
 # is more efficient for large pipelines but adds learning + dependency
-# overhead disproportionate to a fixed 48k→16k mono path. Pin to 0.16.2 and
-# revisit when v2 stabilises a no-allocation Vec wrapper. (Codex review
-# pinned this explicitly: "採用 API に合わせて pin".)
+# overhead disproportionate to a fixed 48k→16k mono path. Pin to 0.16.2 —
+# the pin tracks the API actually in use — and revisit when v2 stabilises a
+# no-allocation Vec wrapper.
 rubato = { version = "0.16.2", features = ["fft_resampler"] }
 
 # Phase 1g-3.7 Step 3+4: structured JSON-line stderr + CLI parsing.
@@ -33,6 +33,17 @@ windows = { version = "0.62", features = ["Win32_System_Threading", "Win32_Found
 # every MB shows up in the installer. lto=true + codegen-units=1 + opt-level=z
 # typically lands the loopback helper around 0.5-1.5 MB. strip removes debug
 # symbols which the user never sees.
+#
+# ⚠ Release builds of the bundled asset (src/assets/daddyAudioCapture.exe)
+# MUST be built with source-path remapping — panic-location strings embed the
+# builder's absolute paths (cargo registry lives under the builder's home
+# dir, so the local username leaks into every distributed binary; the 0.7.2
+# release audit found 62 occurrences). strip=true does NOT remove these.
+# Build with:
+#   RUSTFLAGS='--remap-path-prefix <home dir>=/build --remap-path-prefix <repo root>=/src' \
+#     cargo build --release --locked
+# then bytes-scan the exe for the username / "C:\Users" before copying it
+# into src/assets/.
 lto = true
 codegen-units = 1
 strip = true

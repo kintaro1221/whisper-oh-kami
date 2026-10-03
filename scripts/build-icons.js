@@ -8,7 +8,7 @@
  *   - Geometry (path / strokeWidth / dot trail / opacity) は
  *     `src/assets/brand-mark-spec.mjs` から dynamic import で取得し、UI helper
  *     (`src/assets/brand-mark.js`) と source-of-truth を共有する。tweak したい
- *     場合は spec ファイル 1 箇所だけ触る (PR #27 までの dual-source 同期不要)。
+ *     場合は spec ファイル 1 箇所だけ触る (dual-source の手動同期が不要)。
  *
  * Pipeline:
  *   1. sharp rasterizes SVG → 1024px PNG (master)

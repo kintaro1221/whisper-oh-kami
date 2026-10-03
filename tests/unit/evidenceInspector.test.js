@@ -47,7 +47,16 @@ describe('getElementMeta', () => {
         const meta = getElementMeta('pain');
         expect(meta.statusLabel('empty')).toBe('未確認');
         expect(meta.statusLabel('partial')).toBe('探り中');
-        expect(meta.statusLabel('filled')).toBe('確認済');
+        expect(meta.statusLabel('detected')).toBe('候補あり（未確認）');
+        expect(meta.statusLabel('confirmed')).toBe('確認済み');
+    });
+
+    test('status labels distinguish detected candidates from user confirmation', () => {
+        const meta = getElementMeta('budget');
+        expect(meta.statusLabel('detected')).toBe('候補あり（未確認）');
+        expect(meta.statusLabel('confirmed')).toBe('確認済み');
+        expect(meta.statusLabel('partial')).toBe('探り中');
+        expect(meta.statusLabel('filled')).toBe('未確認'); // legacy value falls back
     });
 
     test('statusLabel falls back to 「未確認」 on unknown status', () => {
@@ -69,6 +78,10 @@ describe('getSourceMeta', () => {
 
     test('llm → LLM refine label with ✨ icon', () => {
         expect(getSourceMeta('llm')).toEqual({ icon: '✨', label: 'LLM refine' });
+    });
+
+    test('source meta knows user actions', () => {
+        expect(getSourceMeta('user').label).toBe('手動');
     });
 
     test('unknown source falls back to neutral marker', () => {

@@ -46,6 +46,24 @@ describe('forge.config.js packagerConfig.ignore (fail-closed allowlist)', () => 
         expect(ignore('/node_modules/@huggingface/transformers')).toBe(false);
     });
 
+    // A 0.7.2 release candidate shipped node_modules/.cache/wrangler/*.json
+    // inside app.asar, leaking the operator's Cloudflare account id and an
+    // account display name derived from their email address to every user
+    // (recoverable with `asar extract`). Tool caches under node_modules are
+    // developer-machine state and are never needed at runtime.
+    test('excludes tool caches under node_modules/.cache', () => {
+        expect(ignore('/node_modules/.cache')).toBe(true);
+        expect(ignore('/node_modules/.cache/wrangler')).toBe(true);
+        expect(ignore('/node_modules/.cache/wrangler/wrangler-account.json')).toBe(true);
+        expect(ignore('/node_modules/.cache/wrangler/pages.json')).toBe(true);
+    });
+
+    test('does not over-match packages whose name merely starts with .cache', () => {
+        // The guard is anchored on a path segment, so a real package
+        // directory like `.cache-something` must still be packaged.
+        expect(ignore('/node_modules/.cache-manifest')).toBe(false);
+    });
+
     test('excludes onnxruntime-web under node_modules', () => {
         expect(ignore('/node_modules/onnxruntime-web')).toBe(true);
         expect(ignore('/node_modules/onnxruntime-web/dist/ort-web.min.js')).toBe(true);
@@ -101,5 +119,136 @@ describe('forge.config.js packagerConfig.ignore (fail-closed allowlist)', () => 
         // sloppy. Confirm the exact-or-child-with-slash semantics hold.
         expect(ignore('/scripts')).toBe(true);
         expect(ignore('/srcbogus')).toBe(true);
+    });
+
+    // Bundled Whisper models (scripts/fetch-whisper-models.mjs) ship via
+    // extraResource, landing in the packaged app's resources/ directory
+    // directly — NOT via app.asar. /resources must stay excluded from the
+    // asar allowlist just like LICENSE / THIRD_PARTY_NOTICES.md above.
+    test('excludes /resources from the asar allowlist (ships via extraResource instead)', () => {
+        expect(ignore('/resources')).toBe(true);
+        expect(ignore('/resources/whisper-models')).toBe(true);
+        expect(ignore('/resources/whisper-models/Xenova/whisper-small/onnx/encoder_model_quantized.onnx')).toBe(true);
+    });
+});
+
+describe('forge.config.js packagerConfig.extraResource (bundled Whisper models)', () => {
+    const { extraResource } = require('../../forge.config.js').packagerConfig;
+
+    test('includes ./resources/whisper-models alongside the existing audio helper / license files', () => {
+        expect(extraResource).toContain('./resources/whisper-models');
+        expect(extraResource).toContain('./src/assets/daddyAudioCapture.exe');
+        expect(extraResource).toContain('./LICENSE');
+        expect(extraResource).toContain('./THIRD_PARTY_NOTICES.md');
+    });
+});
+
+// 2026-09 rewrite (external review must-fix #2): forge.config.js's
+// prePackage hook used to pass `env: process.env` straight through to
+// fetch-whisper-models.mjs --check, so WHISPER_MODELS_DIR /
+// WHISPER_MODELS_MANIFEST set in the calling environment could redirect the
+// pre-package integrity check at a forged fixture directory, bypassing
+// verification of the REAL resources/whisper-models/ that actually ships
+// via extraResource. The fix moved the check into
+// scripts/bundled-whisper-check.js's runBundledWhisperCheck(), which pins
+// --dir/--manifest to the real paths and strips the two env vars from the
+// child process's environment. hooks.prePackage now does nothing but call
+// that module. These tests mock execFileSync (DI-injected) — no real child
+// process, no real ~282 MB fixture.
+describe('forge.config.js hooks.prePackage (delegates to scripts/bundled-whisper-check.js)', () => {
+    const { hooks } = require('../../forge.config.js');
+
+    test('prePackage hook is present', () => {
+        expect(typeof hooks.prePackage).toBe('function');
+    });
+});
+
+describe('scripts/bundled-whisper-check.js runBundledWhisperCheck (env-var bypass guard)', () => {
+    const path = require('node:path');
+    const { runBundledWhisperCheck } = require('../../scripts/bundled-whisper-check.js');
+    const repoRoot = path.join(__dirname, '..', '..');
+
+    let prevDir, prevManifest;
+    beforeEach(() => {
+        prevDir = process.env.WHISPER_MODELS_DIR;
+        prevManifest = process.env.WHISPER_MODELS_MANIFEST;
+    });
+    afterEach(() => {
+        if (prevDir === undefined) delete process.env.WHISPER_MODELS_DIR;
+        else process.env.WHISPER_MODELS_DIR = prevDir;
+        if (prevManifest === undefined) delete process.env.WHISPER_MODELS_MANIFEST;
+        else process.env.WHISPER_MODELS_MANIFEST = prevManifest;
+    });
+
+    test('invokes execFileSync with args pinned to the real resources/whisper-models/ dir and manifest', async () => {
+        const execFileSync = jest.fn();
+        await runBundledWhisperCheck({ execFileSync, nodePath: 'node', repoRoot });
+
+        expect(execFileSync).toHaveBeenCalledTimes(1);
+        const [nodePath, args, opts] = execFileSync.mock.calls[0];
+        expect(nodePath).toBe('node');
+        expect(args).toEqual([
+            path.join(repoRoot, 'scripts', 'fetch-whisper-models.mjs'),
+            '--check',
+            '--dir',
+            path.join(repoRoot, 'resources', 'whisper-models'),
+            '--manifest',
+            path.join(repoRoot, 'scripts', 'whisper-models.manifest.json'),
+        ]);
+        expect(opts.cwd).toBe(repoRoot);
+    });
+
+    test('strips WHISPER_MODELS_DIR / WHISPER_MODELS_MANIFEST from the child env even when set in process.env', async () => {
+        process.env.WHISPER_MODELS_DIR = '/attacker/controlled/fixture-dir';
+        process.env.WHISPER_MODELS_MANIFEST = '/attacker/controlled/fixture-manifest.json';
+
+        const execFileSync = jest.fn();
+        await runBundledWhisperCheck({ execFileSync, nodePath: 'node', repoRoot });
+
+        const [, , opts] = execFileSync.mock.calls[0];
+        expect(opts.env).not.toHaveProperty('WHISPER_MODELS_DIR');
+        expect(opts.env).not.toHaveProperty('WHISPER_MODELS_MANIFEST');
+        // Also proves the args (not just env) stay pinned to the real paths
+        // regardless of the env var overrides.
+        const args = execFileSync.mock.calls[0][1];
+        expect(args).toContain(path.join(repoRoot, 'resources', 'whisper-models'));
+        expect(args).not.toContain('/attacker/controlled/fixture-dir');
+    });
+
+    test('rejects when execFileSync throws (bundled model verification failed)', async () => {
+        const execFileSync = jest.fn(() => {
+            throw new Error('boom: check failed');
+        });
+
+        await expect(runBundledWhisperCheck({ execFileSync, nodePath: 'node', repoRoot })).rejects.toThrow(/failed verification/i);
+    });
+
+    test('forge.config.js hooks.prePackage calls runBundledWhisperCheck (module wiring, mocked child process)', async () => {
+        // Exercise the real forge.config.js prePackage hook end-to-end, but
+        // with node:child_process's execFileSync mocked so no real child
+        // process runs. Proves prePackage is wired through
+        // scripts/bundled-whisper-check.js rather than shelling out
+        // directly, and that a process.env override of
+        // WHISPER_MODELS_DIR/WHISPER_MODELS_MANIFEST does not change what
+        // gets passed to the child process.
+        jest.resetModules();
+        process.env.WHISPER_MODELS_DIR = '/attacker/controlled/fixture-dir';
+
+        const execFileSyncSpy = jest.fn();
+        jest.doMock('node:child_process', () => ({
+            execFileSync: execFileSyncSpy,
+        }));
+
+        const { hooks } = require('../../forge.config.js');
+        await hooks.prePackage();
+
+        expect(execFileSyncSpy).toHaveBeenCalledTimes(1);
+        const [, args, opts] = execFileSyncSpy.mock.calls[0];
+        expect(args).toContain(path.join(repoRoot, 'resources', 'whisper-models'));
+        expect(args).not.toContain('/attacker/controlled/fixture-dir');
+        expect(opts.env).not.toHaveProperty('WHISPER_MODELS_DIR');
+
+        jest.dontMock('node:child_process');
+        jest.resetModules();
     });
 });

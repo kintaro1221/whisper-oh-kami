@@ -10,11 +10,15 @@ function read(relPath) {
 }
 
 describe('trial provider contract', () => {
-    test('new installs default to the keyless trial path and fastest Whisper model', () => {
+    // 2026-09: default Whisper model changed tiny -> small. Xenova/whisper-tiny's
+    // Japanese accuracy proved unusable in practice; small is bundled with the
+    // installer too, so this stays a no-download default (see
+    // scripts/fetch-whisper-models.mjs).
+    test('new installs default to the keyless trial path and the bundled whisper-small model', () => {
         const storage = read('src/storage.js');
 
         expect(storage).toMatch(/providerMode:\s*'trial'/);
-        expect(storage).toMatch(/whisperModel:\s*'Xenova\/whisper-tiny'/);
+        expect(storage).toMatch(/whisperModel:\s*'Xenova\/whisper-small'/);
     });
 
     test('MainView exposes trial as the first mode and does not require keys to start it', () => {

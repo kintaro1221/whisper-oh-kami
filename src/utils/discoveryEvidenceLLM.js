@@ -53,11 +53,13 @@ const PROMPT_HEADER = [
     '- timeline (期限・タイミング): いつまでに決めたいか (具体的時期があれば filled)',
     '',
     '判定値:',
-    '- "empty": 言及なし',
+    '- "empty": 言及なし、または撤回・否定された',
     '- "partial": 言及あるが具体性弱い',
     '- "filled": 具体的な数値・固有名・期日が出ている',
     '',
-    'quote は該当する opponent 発話を transcript から原文ママで返す (substring が後で transcript と照合される)。無ければ空文字。',
+    '否定・仮定・他社の話・撤回された内容は filled にしない。撤回・否定された要素は status を empty にし、その撤回・否定の発話を quote に入れる。',
+    '',
+    'quote は該当する opponent 発話を transcript から原文ママで返す (substring が後で transcript と照合される)。言及が全く無い empty の場合だけ quote は空文字。',
     '',
     '直近の対話:',
 ].join('\n');
@@ -80,7 +82,9 @@ function buildPrompt(transcript) {
 
 // Extract a 5-element JSON object from raw LLM output. Tolerates surrounding
 // text and ```json fences. Returns null if no valid shape is found. Each
-// element with an unknown status is dropped (NOT defaulted to empty).
+// element with an unknown status is dropped (NOT defaulted to empty). An
+// 'empty' status may carry a non-empty quote (the retraction / negation
+// utterance) — applyLLMResult uses it for a grounded downgrade.
 function parseLLMResponse(text) {
     if (!text || typeof text !== 'string') return null;
     let candidate = text.trim();
@@ -117,28 +121,41 @@ function createDiscoveryEvidenceLLM(deps = {}) {
 
     let lastRunAt = 0;
     let inFlight = false;
+    let generation = 0;
     let callCount = 0;
     let turnsSinceLastRun = 0;
+    // Same-session freshness: a maybeRefine() that lands while a call is in
+    // flight records one pending rerun (coalesced — never a queue). Each
+    // call carries a revision; a result older than one already applied is
+    // never applied.
+    let pendingRerun = false;
+    let callRevision = 0;
+    let appliedRevision = 0;
 
     function notifyTurn() {
         turnsSinceLastRun++;
     }
 
     function reset() {
+        generation++;
         lastRunAt = 0;
         inFlight = false;
         callCount = 0;
         turnsSinceLastRun = 0;
+        pendingRerun = false;
     }
 
     function getStats() {
-        return { lastRunAt, inFlight, callCount, turnsSinceLastRun };
+        return { lastRunAt, inFlight, callCount, turnsSinceLastRun, generation, pendingRerun };
     }
 
     async function maybeRefine() {
         // Hard gates first (cheapest checks that block unconditionally).
         if (getProviderMode() !== 'byok') return { fired: false, reason: 'privacy-gate' };
-        if (inFlight) return { fired: false, reason: 'in-flight' };
+        if (inFlight) {
+            pendingRerun = true;
+            return { fired: false, reason: 'in-flight', pending: true };
+        }
         if (callCount >= MAX_CALLS_PER_SESSION) return { fired: false, reason: 'cap-exceeded' };
 
         const t = now();
@@ -151,30 +168,68 @@ function createDiscoveryEvidenceLLM(deps = {}) {
 
         const transcript = String(getTranscript() || '').trim();
         if (!transcript) return { fired: false, reason: 'empty-transcript' };
+        return runCall(transcript);
+    }
 
+    // The coalesced rerun skips the cooldown / turn threshold (the request
+    // already passed them while the previous call was in flight) but keeps
+    // the privacy gate and the per-session cap.
+    async function runPendingRerun() {
+        if (getProviderMode() !== 'byok') return { fired: false, reason: 'privacy-gate' };
+        if (callCount >= MAX_CALLS_PER_SESSION) return { fired: false, reason: 'cap-exceeded' };
+        const transcript = String(getTranscript() || '').trim();
+        if (!transcript) return { fired: false, reason: 'empty-transcript' };
+        return runCall(transcript);
+    }
+
+    async function runCall(transcript) {
         inFlight = true;
+        const gen = generation;
+        const rev = ++callRevision;
         callCount++;
-        lastRunAt = t;
+        lastRunAt = now();
         turnsSinceLastRun = 0;
+        let result;
         try {
             if (!llmClient || typeof llmClient.generateContent !== 'function') {
                 throw new Error('llmClient.generateContent missing');
             }
             const prompt = buildPrompt(transcript);
             const raw = await llmClient.generateContent(prompt);
+            if (gen !== generation) {
+                log('[discoveryEvidenceLLM] stale result dropped (generation changed during call)');
+                return { fired: true, applied: false, reason: 'stale' };
+            }
             const parsed = parseLLMResponse(raw);
             if (!parsed) {
-                log('[discoveryEvidenceLLM] parse failed; raw head:', String(raw || '').slice(0, 200));
-                return { fired: true, applied: false, reason: 'parse-failed' };
+                // The raw output can echo transcript text — only with WOK_DEBUG=1.
+                if (process.env.WOK_DEBUG === '1') {
+                    log('[discoveryEvidenceLLM] parse failed; raw head:', String(raw || '').slice(0, 200));
+                } else {
+                    log('[discoveryEvidenceLLM] parse failed', { chars: String(raw || '').length });
+                }
+                result = { fired: true, applied: false, reason: 'parse-failed' };
+            } else if (rev < appliedRevision || (pendingRerun && turnsSinceLastRun > 0)) {
+                // Newer turns arrived while this call was in flight (or a newer
+                // call already applied): the rerun below sees the newest
+                // transcript, so this older result is not applied.
+                result = { fired: true, applied: false, reason: 'superseded', parsed };
+            } else {
+                applyResult(parsed, transcript);
+                appliedRevision = rev;
+                result = { fired: true, applied: true, parsed };
             }
-            applyResult(parsed, transcript);
-            return { fired: true, applied: true, parsed };
         } catch (err) {
             log('[discoveryEvidenceLLM] call failed:', err && err.message);
-            return { fired: true, applied: false, reason: 'error', error: err && err.message };
+            result = { fired: true, applied: false, reason: 'error', error: err && err.message };
         } finally {
-            inFlight = false;
+            if (gen === generation) inFlight = false;
         }
+        if (gen === generation && pendingRerun) {
+            pendingRerun = false;
+            if (turnsSinceLastRun > 0) result.rerun = await runPendingRerun();
+        }
+        return result;
     }
 
     return { notifyTurn, maybeRefine, reset, getStats };

@@ -36,14 +36,16 @@ describe('B1-3: local-default STT + working Deepgram opt-in', () => {
         expect(read('src/components/app/CheatingDaddyApp.js')).toMatch(/this\.sttMode = 'local'/);
     });
 
-    test('the Recommended tag moves to local privacy, off cloud', () => {
+    // v0.7.5: the no-Deepgram option is the *default*, not a privacy
+    // recommendation — in byok the counterpart's audio still reaches Gemini Live.
+    test('the Default tag sits on the no-Deepgram option, never on cloud', () => {
         const ja = read('src/i18n/ja.js');
         const en = read('src/i18n/en.js');
 
-        expect(ja).toMatch(/'customize\.stt\.local\.tag':\s*'推奨'/);
-        expect(en).toMatch(/'customize\.stt\.local\.tag':\s*'Recommended'/);
-        expect(ja).not.toMatch(/'customize\.stt\.cloud\.tag':\s*'推奨'/);
-        expect(en).not.toMatch(/'customize\.stt\.cloud\.tag':\s*'Recommended'/);
+        expect(ja).toMatch(/'customize\.stt\.local\.tag':\s*'既定'/);
+        expect(en).toMatch(/'customize\.stt\.local\.tag':\s*'Default'/);
+        expect(ja).not.toMatch(/'customize\.stt\.cloud\.tag':\s*'(推奨|既定)'/);
+        expect(en).not.toMatch(/'customize\.stt\.cloud\.tag':\s*'(Recommended|Default)'/);
     });
 
     test('BYOK setup offers an OPTIONAL Deepgram key field with cross-border consent', () => {
