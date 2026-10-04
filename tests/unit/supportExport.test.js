@@ -62,6 +62,7 @@ describe('support export snapshot', () => {
                 release: '10.0.22631',
                 arch: 'x64',
                 safeStorageAvailable: true,
+                credentialStorageSessionOnly: false,
             },
             settings: {
                 providerMode: 'byok',

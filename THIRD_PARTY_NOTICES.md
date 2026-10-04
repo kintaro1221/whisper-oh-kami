@@ -18,12 +18,57 @@ Sharp bundled libraries: 29
 > "Sharp bundled libraries" reproduces the installed Windows x64 package inventory.
 > Missing bundled-library texts are explicitly identified below; this inventory
 > does not establish complete binary attribution or corresponding-source compliance.
+> The Electron / Chromium runtime is referenced (not reproduced) in its own section below.
 > Peer-only npm edges and other external binaries are outside this inventory.
 
 > **Manual fallbacks.** Entries marked _License text supplied from MANUAL_LICENSE_TEXTS_
 > have a provenance note attached below the License: line and above the code fence.
 > "Verbatim" entries reproduce upstream text exactly; "SPDX canonical template" entries
 > are populated from `package.json` metadata when the upstream ships no LICENSE file.
+
+---
+
+## Upstream project (sohzm/cheating-daddy)
+
+WhisperOhKAMI is derived from sohzm/cheating-daddy (GPL-3.0); see README.md for the modification notice (GPLv3 §5(a)).
+
+---
+
+## Electron / Chromium runtime (electron@42.5.0)
+
+License: MIT (Electron); bundled components under their own licenses
+
+The application runtime is Electron, which bundles Chromium, Node.js, V8 and
+their third-party components. Their complete license notices are in
+`LICENSES.chromium.html`, shipped in the `resources/` directory next to this
+file (and next to the application executable), and are also published with
+the matching Electron release: https://github.com/electron/electron/releases/tag/v42.5.0
+
+Electron's own license (from the installed `electron` package):
+
+```
+Copyright (c) Electron contributors
+Copyright (c) 2013-2020 GitHub Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
 
 ---
 
@@ -7480,6 +7525,8 @@ Please report any errors or omissions via
 https://github.com/lovell/sharp-libvips/issues/new
 
 
+Source code for the LGPL-licensed libraries bundled with sharp (libvips 8.18.6) is available from https://github.com/lovell/sharp-libvips/releases/tag/v1.3.3
+
 ### aom@3.14.1
 
 Pinned source: https://aomedia.googlesource.com/aom/+/refs/tags/v3.14.1/LICENSE?format=TEXT
@@ -7669,6 +7716,8 @@ file under each directory and the opening comment of each file for copyright
 and licensing information.
 
 ```
+
+License election: cairo is used under the Mozilla Public License, as listed for cairo in the sharp package README above and in https://github.com/lovell/sharp-libvips/blob/v1.3.3/THIRD-PARTY-NOTICES.md (Mozilla Public License 2.0). cairo 1.18.4 COPYING (reproduced verbatim above) offers LGPL 2.1 or MPL 1.1; the MPL 1.1 text is reproduced below, and the LGPL 2.1 text is retained for completeness.
 
 Additional pinned source: https://gitlab.freedesktop.org/cairo/cairo/-/raw/1.18.4/COPYING-LGPL-2.1
 
@@ -8661,8 +8710,6 @@ EXHIBIT A -Mozilla Public License.
 
 
 ```
-
-**UNRESOLVED:** The package README declares MPL 2.0, but cairo 1.18.4 COPYING offers LGPL 2.1 or MPL 1.1. Both exact-version license texts are supplied; the binary distributor license selection and provenance remain to be reconciled before release.
 
 ### cgif@0.5.3
 
@@ -11797,9 +11844,35 @@ implied warranty.
 
 ```
 
-### libnsgif@unknown
+### libnsgif (vendored in libvips@8.18.6)
 
-**UNRESOLVED:** Package README names this library but versions.json does not identify its version; no unpinned license substituted.
+Pinned source: https://raw.githubusercontent.com/libvips/libvips/v8.18.6/libvips/foreign/libnsgif/COPYING
+
+```
+Copyright (C) 2004 Richard Wilson
+Copyright (C) 2008 Sean Fox
+Copyright (C) 2013-2021 Michael Drake
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+  * The above copyright notice and this permission notice shall be included in
+    all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+```
+
+libnsgif (NetSurf, MIT License) has no separate release in the sharp binary: it is compiled from the copy vendored in the libvips 8.18.6 source tree (libvips/foreign/libnsgif, upstream snapshot last updated 22 Jan 2023), so it carries no version of its own in versions.json. The MIT License listing is confirmed by https://github.com/lovell/sharp-libvips/blob/v1.3.3/THIRD-PARTY-NOTICES.md (that notice is a license table only and reproduces no text); the text above is the vendored COPYING file at the pinned libvips tag.
 
 ### libpng@1.6.58
 

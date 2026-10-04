@@ -14,6 +14,7 @@ export class KeyWizard extends LitElement {
         _step: { state: true },
         _geminiState: { state: true }, // 'idle'|'checking'|'ok'|'invalid'|'network' ('network' = any non-definitive could-not-verify)
         _deepgramState: { state: true },
+        _sessionOnly: { state: true }, // keys cannot be stored encrypted on this PC
     };
 
     static styles = css`
@@ -108,6 +109,24 @@ export class KeyWizard extends LitElement {
         this._geminiState = 'idle';
         this._deepgramState = 'idle';
         this._debounce = null;
+        this._sessionOnly = false;
+    }
+
+    firstUpdated() {
+        const api = window.whisperOhKami && window.whisperOhKami.storage;
+        if (!api || typeof api.getCredentialStorageStatus !== 'function') return;
+        api.getCredentialStorageStatus()
+            .then(status => {
+                this._sessionOnly = !!(status && status.sessionOnly);
+            })
+            .catch(() => {});
+    }
+
+    _renderSessionOnlyNotice() {
+        if (!this._sessionOnly) return '';
+        return html`<div class="privacy" role="note">
+            <strong>${t('credentials.session_only.title')}</strong><br />${t('credentials.session_only.body')}
+        </div>`;
     }
 
     _emit(name, detail) {
@@ -207,7 +226,10 @@ export class KeyWizard extends LitElement {
 
     render() {
         return html`
-            <div class="panel">${this._step === 1 ? this._renderGemini() : this._step === 2 ? this._renderDeepgram() : this._renderDone()}</div>
+            <div class="panel">
+                ${this._renderSessionOnlyNotice()}
+                ${this._step === 1 ? this._renderGemini() : this._step === 2 ? this._renderDeepgram() : this._renderDone()}
+            </div>
         `;
     }
 }

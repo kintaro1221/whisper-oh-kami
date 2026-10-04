@@ -235,6 +235,15 @@ function setupStorageIpcHandlers() {
         }
     });
 
+    ipcMain.handle('storage:get-credential-storage-status', async () => {
+        try {
+            return { success: true, data: storage.getCredentialStorageStatus() };
+        } catch (error) {
+            console.error('Error getting credential storage status:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
     ipcMain.handle('storage:set-credentials', async (event, credentials) => {
         try {
             storage.setCredentials(credentials);
@@ -430,6 +439,7 @@ function setupGeneralIpcHandlers() {
                     arch: os.arch(),
                 },
                 safeStorageAvailable: isSafeStorageAvailable(),
+                credentialStorageSessionOnly: storage.getCredentialStorageStatus().sessionOnly,
                 preferences: storage.getPreferences(),
                 credentials: storage.getCredentials(),
                 sessions: storage.getAllSessions(),

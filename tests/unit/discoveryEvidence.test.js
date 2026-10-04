@@ -543,6 +543,21 @@ describe('polarity / retraction / confirmation (v0.7.5 trust gates)', () => {
         expect(store.confirmElement('nope').changed).toBe(false);
     });
 
+    test('confirmElement on an element without live evidence is a no-op', () => {
+        const store = createDiscoveryEvidence();
+        let r = store.confirmElement('budget');
+        expect(r.changed).toBe(false);
+        expect(r.state.elements.budget.status).toBe('empty');
+        expect(r.state.elements.budget.confirmed).toBe(false);
+        expect(r.state.confirmedCount).toBe(0);
+        // Only retracted rows left: still nothing to confirm.
+        store.processNewTurn(opp('予算は100万円です'));
+        store.retractElement('budget', 'manual');
+        r = store.confirmElement('budget');
+        expect(r.changed).toBe(false);
+        expect(r.state.elements.budget.status).toBe('empty');
+    });
+
     test('LLM empty with a grounded retraction quote downgrades; ungrounded empty is a no-op', () => {
         const store = createDiscoveryEvidence();
         store.processNewTurn(opp('予算は100万円です'));
@@ -884,5 +899,103 @@ describe('final-review fixes: LLM path parity (v0.7.5 trust gates)', () => {
             '[相手] 他社の話は置いておきます。\n[相手] 予算は300万円です'
         );
         expect(r.state.elements.budget.status).toBe('detected');
+    });
+});
+
+// External validator backlog (30 B2B cases): concrete customer statements
+// that stayed keyword-only. Pain now also fills on a symptom + frequency /
+// volume / process marker in the same sentence; timeline also fills on
+// relative deadlines (kept as said, not resolved to absolute dates).
+describe('concrete pain / timeline: frequency-marked symptoms and relative dates', () => {
+    const opp = text => ({ speaker: 'opponent', text });
+    const lastRow = (state, key) => state.elements[key].evidence[state.elements[key].evidence.length - 1];
+
+    test.each([
+        ['当社では受注内容を二重入力していて、毎週入力ミスが起きています。'],
+        ['私たちの担当者は、毎月の締め作業で手入力に5時間かかって困っています。'],
+        ['問い合わせが個人の受信箱に分散していて、返信漏れが出ています。'],
+    ])('counterpart pain with a frequency/process marker is detected: %s', text => {
+        const store = createDiscoveryEvidence();
+        const { state } = store.processNewTurn(opp(text));
+        expect(state.elements.pain.status).toBe('detected');
+        expect(lastRow(state, 'pain')).toMatchObject({ specificity: 'concrete', polarity: null });
+    });
+
+    test('counterpart relative deadline (C20) is detected', () => {
+        const store = createDiscoveryEvidence();
+        const { state } = store.processNewTurn(opp('社内で決定しました。今月30日を本稼働の期限にします。'));
+        expect(state.elements.timeline.status).toBe('detected');
+        expect(lastRow(state, 'timeline')).toMatchObject({ specificity: 'concrete', polarity: null });
+    });
+
+    test.each([
+        ['来月末'],
+        ['再来月10日'],
+        ['今月中'],
+        ['年内'],
+        ['今年中'],
+        ['今期中'],
+        ['来期初'],
+        ['下期末'],
+        ['2週間以内'],
+        ['三か月以内'],
+        ['3ヶ月以内'],
+    ])('relative deadline form is concrete: %s', text => {
+        expect(matchElement('timeline', `${text}に導入したいです`)).toBe('concrete');
+    });
+
+    test('negation still wins: denied pain stays partial (negated)', () => {
+        const store = createDiscoveryEvidence();
+        const { state } = store.processNewTurn(opp('毎週ミスが出ているわけではありません'));
+        expect(state.elements.pain.status).toBe('partial');
+        expect(lastRow(state, 'pain').polarity).toBe('negated');
+    });
+
+    test('negation still wins: a deadline that cannot be decided stays partial (negated)', () => {
+        const store = createDiscoveryEvidence();
+        const { state } = store.processNewTurn(opp('今月30日までには決められません'));
+        expect(state.elements.timeline.status).toBe('partial');
+        expect(lastRow(state, 'timeline').polarity).toBe('negated');
+    });
+
+    test('pain voiced in the negative is still pain (not a denial)', () => {
+        const store = createDiscoveryEvidence();
+        const { state } = store.processNewTurn(opp('毎月の手入力でミスが減らないです'));
+        expect(state.elements.pain.status).toBe('detected');
+    });
+
+    test("third-party still wins: another company's symptom does not detect", () => {
+        const store = createDiscoveryEvidence();
+        const { state } = store.processNewTurn(opp('別会社では毎週入力ミスが出ていると聞きました'));
+        expect(state.elements.pain.status).toBe('partial');
+        expect(lastRow(state, 'pain').polarity).toBe('third_party');
+    });
+
+    test("salesperson's own speech never raises status", () => {
+        const store = createDiscoveryEvidence();
+        const { state } = store.processNewTurn({ speaker: 'self', text: '毎週入力ミスが起きていて、今月30日が期限ですよね' });
+        expect(state.elements.pain.status).toBe('empty');
+        expect(state.elements.timeline.status).toBe('empty');
+        expect(state.elements.pain.selfMentions).toHaveLength(1);
+    });
+
+    test('keyword-only speech without a marker or date stays partial', () => {
+        const store = createDiscoveryEvidence();
+        let { state } = store.processNewTurn(opp('ミスが心配です'));
+        expect(state.elements.pain.status).toBe('partial');
+        expect(lastRow(state, 'pain').specificity).toBe('keyword');
+        ({ state } = store.processNewTurn(opp('期限はまだ決めていません')));
+        expect(state.elements.timeline.status).toBe('partial');
+        expect(lastRow(state, 'timeline').specificity).toBe('keyword');
+    });
+
+    test('a bare marker without a symptom does not fill pain', () => {
+        expect(matchElement('pain', '毎週月曜に定例があります')).toBeNull();
+        expect(matchElement('pain', '担当は3人です')).toBeNull();
+    });
+
+    test('a one-off delay with a bare duration is not a pain (duration alone is not a marker)', () => {
+        expect(matchElement('pain', '会議が1時間遅れました')).not.toBe('concrete');
+        expect(matchElement('pain', '締め作業で手入力に5時間かかって困っています')).toBe('concrete');
     });
 });

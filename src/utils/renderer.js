@@ -53,6 +53,12 @@ const storage = {
     async setCredentials(credentials) {
         return ipcRenderer.invoke('storage:set-credentials', credentials);
     },
+    // { encrypted, reason, sessionOnly } — sessionOnly means keys are kept in
+    // memory for this session only (safeStorage encryption unavailable).
+    async getCredentialStorageStatus() {
+        const result = await ipcRenderer.invoke('storage:get-credential-storage-status');
+        return result.success ? result.data : { encrypted: true, reason: null, sessionOnly: false };
+    },
     async getApiKey() {
         const result = await ipcRenderer.invoke('storage:get-api-key');
         return result.success ? result.data : '';

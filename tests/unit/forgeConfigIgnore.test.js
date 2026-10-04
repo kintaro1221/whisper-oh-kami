@@ -64,6 +64,22 @@ describe('forge.config.js packagerConfig.ignore (fail-closed allowlist)', () => 
         expect(ignore('/node_modules/.cache-manifest')).toBe(false);
     });
 
+    // 0.7.6 shipped Vite's pre-bundle cache and the i18n Jest tests inside
+    // app.asar. Neither is ever loaded at runtime.
+    test('excludes Vite cache under node_modules/.vite', () => {
+        expect(ignore('/node_modules/.vite')).toBe(true);
+        expect(ignore('/node_modules/.vite/deps/_metadata.json')).toBe(true);
+        expect(ignore('/node_modules/.vite-plugin-something')).toBe(false);
+    });
+
+    test('excludes src/i18n/__tests__ while keeping the rest of src/i18n', () => {
+        expect(ignore('/src/i18n/__tests__')).toBe(true);
+        expect(ignore('/src/i18n/__tests__/index.test.js')).toBe(true);
+        expect(ignore('/src/i18n')).toBe(false);
+        expect(ignore('/src/i18n/index.js')).toBe(false);
+        expect(ignore('/src/i18n/ja.js')).toBe(false);
+    });
+
     test('excludes onnxruntime-web under node_modules', () => {
         expect(ignore('/node_modules/onnxruntime-web')).toBe(true);
         expect(ignore('/node_modules/onnxruntime-web/dist/ort-web.min.js')).toBe(true);
@@ -140,6 +156,37 @@ describe('forge.config.js packagerConfig.extraResource (bundled Whisper models)'
         expect(extraResource).toContain('./src/assets/daddyAudioCapture.exe');
         expect(extraResource).toContain('./LICENSE');
         expect(extraResource).toContain('./THIRD_PARTY_NOTICES.md');
+    });
+
+    test("ships Electron's LICENSES.chromium.html into resources/ (named by THIRD_PARTY_NOTICES.md)", () => {
+        expect(extraResource).toContain('./node_modules/electron/dist/LICENSES.chromium.html');
+    });
+});
+
+describe('forge.config.js Windows metadata / Squirrel icons', () => {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const config = require('../../forge.config.js');
+    const repoRoot = path.join(__dirname, '..', '..');
+
+    test('appCopyright (the key packager maps to LegalCopyright) is ASCII-only and names GPL-3.0', () => {
+        const LegalCopyright = config.packagerConfig.appCopyright;
+        expect(config.packagerConfig.win32metadata.LegalCopyright).toBeUndefined();
+        expect(LegalCopyright).toMatch(/GPL-3\.0/);
+        expect(LegalCopyright).toMatch(/^[ -~]+$/);
+    });
+
+    test('Squirrel maker sets setupIcon and an https iconUrl backed by lp/public/logo.ico', () => {
+        const squirrel = config.makers.find(m => m.name === '@electron-forge/maker-squirrel');
+        expect(squirrel.config.setupIcon).toBe('src/assets/logo.ico');
+        expect(squirrel.config.iconUrl).toBe('https://whisperohkami.pages.dev/logo.ico');
+        // The public mirror (git archive with lp/ export-ignored) has no
+        // lp/public/, so the byte comparison only runs where the LP exists.
+        const lpIcoPath = path.join(repoRoot, 'lp', 'public', 'logo.ico');
+        if (fs.existsSync(path.join(repoRoot, 'lp'))) {
+            const appIco = fs.readFileSync(path.join(repoRoot, 'src', 'assets', 'logo.ico'));
+            expect(fs.readFileSync(lpIcoPath).equals(appIco)).toBe(true);
+        }
     });
 });
 

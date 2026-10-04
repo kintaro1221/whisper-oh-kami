@@ -1,7 +1,7 @@
 {
     "name": "whisper-oh-kami",
     "productName": "WhisperOhKAMI",
-    "version": "0.7.6",
+    "version": "0.7.7",
     "description": "Real-time AI hearing copilot for B2B sales discovery — 商談ヒアリングのささやきの神",
     "main": "src/index.js",
     "scripts": {

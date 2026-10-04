@@ -625,6 +625,8 @@ if (process.platform === 'win32' && process.arch === 'x64' && !sharp)
     throw new Error('Installed optional dependency @img/sharp-win32-x64 is required');
 let sharpReadme;
 let sharpLibraries = [];
+let sharpVipsVersion;
+let sharpLibvipsVersion;
 if (sharp) {
     sharpReadme = fs.readFileSync(path.join(sharp.dir, 'README.md'), 'utf8');
     sharpLibraries = readJson(path.join(__dirname, 'licenses', `sharp-win32-x64-${sharp.version}.json`));
@@ -642,6 +644,21 @@ if (sharp) {
     }
     const versions = readJson(path.join(sharp.dir, 'versions.json'));
     if (!versions) throw new Error('Missing sharp bundled library versions');
+    // libvips version, used only for the "libvips X" wording of the source
+    // pointer below.
+    sharpVipsVersion = versions.vips;
+    if (!sharpVipsVersion) throw new Error('Missing libvips version in sharp versions.json');
+    // lovell/sharp-libvips release tags follow the @img/sharp-libvips-*
+    // package version (v1.3.x), NOT the libvips version. sharp pins that
+    // package in its optionalDependencies; the matching release publishes the
+    // corresponding source of the LGPL libraries bundled into the sharp
+    // binary (LGPL-3.0 §4 / LGPL-2.1 §6). Fail closed if it cannot be found.
+    const sharpMain = entries.find(e => e.name === 'sharp');
+    const sharpMainPkg = sharpMain && readJson(path.join(sharpMain.dir, 'package.json'));
+    const libvipsDep = Object.keys((sharpMainPkg && sharpMainPkg.optionalDependencies) || {}).find(name => name.startsWith('@img/sharp-libvips-'));
+    sharpLibvipsVersion = libvipsDep && sharpMainPkg.optionalDependencies[libvipsDep];
+    if (!sharpLibvipsVersion || !/^\d+\.\d+\.\d+$/.test(sharpLibvipsVersion))
+        throw new Error('Cannot derive the lovell/sharp-libvips release from sharp optionalDependencies (@img/sharp-libvips-*)');
     const aliases = {
         libarchive: 'archive',
         libexif: 'exif',
@@ -659,9 +676,26 @@ if (sharp) {
     for (const library of sharpLibraries) {
         const version = versions[aliases[library.library] || library.library];
         if (version && library.version !== version) throw new Error(`Sharp pinned library version mismatch: ${library.library}`);
-        if (!version && !library.unavailable) throw new Error(`Unverified sharp library version: ${library.library}`);
+        // A library vendored inside another bundled library's source tree
+        // (e.g. libnsgif inside libvips) has no versions.json entry; it is
+        // pinned through its host library's version instead.
+        if (library.vendoredIn) {
+            const host = library.vendoredIn;
+            if (version || versions[aliases[host.library] || host.library] !== host.version)
+                throw new Error(`Sharp vendored library host version mismatch: ${library.library}`);
+        } else if (!version && !library.unavailable) throw new Error(`Unverified sharp library version: ${library.library}`);
     }
 }
+
+// Electron is a devDependency (electron-packager copies its prebuilt runtime
+// into the app), so the production walk above never sees it. Its version is
+// read from the installed package so the release link below always matches
+// the runtime that actually ships. Fail closed: a notices file without the
+// runtime pointer must not be generated.
+const electronPkg = readJson(path.join(rootNodeModules, 'electron', 'package.json'));
+if (!electronPkg || !electronPkg.version) throw new Error('Installed electron package (node_modules/electron/package.json) is required');
+const electronLicenseText = findLicenseText(path.join(rootNodeModules, 'electron'), 'electron', electronPkg.version);
+if (!electronLicenseText || !electronLicenseText.text) throw new Error('Installed electron package LICENSE is required');
 
 const lines = [];
 lines.push('# Third-Party Notices');
@@ -686,12 +720,39 @@ lines.push('> dependencies, for the bundled audio helper (`daddyAudioCapture.exe
 lines.push('> "Sharp bundled libraries" reproduces the installed Windows x64 package inventory.');
 lines.push('> Missing bundled-library texts are explicitly identified below; this inventory');
 lines.push('> does not establish complete binary attribution or corresponding-source compliance.');
+lines.push('> The Electron / Chromium runtime is referenced (not reproduced) in its own section below.');
 lines.push('> Peer-only npm edges and other external binaries are outside this inventory.');
 lines.push('');
 lines.push('> **Manual fallbacks.** Entries marked _License text supplied from MANUAL_LICENSE_TEXTS_');
 lines.push('> have a provenance note attached below the License: line and above the code fence.');
 lines.push('> "Verbatim" entries reproduce upstream text exactly; "SPDX canonical template" entries');
 lines.push('> are populated from `package.json` metadata when the upstream ships no LICENSE file.');
+lines.push('');
+lines.push('---');
+lines.push('');
+lines.push('## Upstream project (sohzm/cheating-daddy)');
+lines.push('');
+lines.push(
+    `${rootPkg.productName || rootPkg.name} is derived from sohzm/cheating-daddy (GPL-3.0); see README.md for the modification notice (GPLv3 §5(a)).`
+);
+lines.push('');
+lines.push('---');
+lines.push('');
+lines.push(`## Electron / Chromium runtime (electron@${electronPkg.version})`);
+lines.push('');
+lines.push('License: MIT (Electron); bundled components under their own licenses');
+lines.push('');
+lines.push('The application runtime is Electron, which bundles Chromium, Node.js, V8 and');
+lines.push('their third-party components. Their complete license notices are in');
+lines.push('`LICENSES.chromium.html`, shipped in the `resources/` directory next to this');
+lines.push('file (and next to the application executable), and are also published with');
+lines.push(`the matching Electron release: https://github.com/electron/electron/releases/tag/v${electronPkg.version}`);
+lines.push('');
+lines.push("Electron's own license (from the installed `electron` package):");
+lines.push('');
+lines.push('```');
+lines.push(electronLicenseText.text);
+lines.push('```');
 lines.push('');
 lines.push('---');
 lines.push('');
@@ -773,12 +834,18 @@ if (sharp) {
         'The following package README is reproduced verbatim (line endings normalized). Its upstream links are attribution, not pinned license-text provenance.',
         '',
         sharpReadme,
+        '',
+        `Source code for the LGPL-licensed libraries bundled with sharp (libvips ${sharpVipsVersion}) is available from https://github.com/lovell/sharp-libvips/releases/tag/v${sharpLibvipsVersion}`,
         ''
     );
     for (const library of sharpLibraries) {
-        lines.push(`### ${library.library}@${library.version || 'version-unavailable'}`, '');
+        const heading = library.vendoredIn
+            ? `${library.library} (vendored in ${library.vendoredIn.library}@${library.vendoredIn.version})`
+            : `${library.library}@${library.version || 'version-unavailable'}`;
+        lines.push(`### ${heading}`, '');
         if (library.source) lines.push(`Pinned source: ${library.source}`, '');
         if (library.text) lines.push('```', library.text, '```', '');
+        if (library.note) lines.push(library.note, '');
         for (const extra of library.additionalTexts || []) {
             if (!extra.source || !extra.text) throw new Error(`Missing additional sharp license provenance/text: ${library.library}`);
             lines.push(`Additional pinned source: ${extra.source}`, '', '```', extra.text, '```', '');

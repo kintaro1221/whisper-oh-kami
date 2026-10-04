@@ -22,6 +22,10 @@ const ENCRYPTED_CREDENTIALS_VERSION = 1;
 const ENCRYPTED_CREDENTIALS_MARKER = 'whisper-oh-kami.safeStorage.credentials';
 let safeStorageForTest;
 let credentialEncryptionWarningEmitted = false;
+// Fail-closed fallback: when safeStorage cannot encrypt, credentials entered in
+// this process live only here (module memory) and are never written to disk.
+// Cleared on process exit, by clearAllData(), and by _setSafeStorageForTest().
+let sessionCredentials = null;
 
 const DEFAULT_PREFERENCES = {
     customPrompt: '',
@@ -188,7 +192,7 @@ function getSafeStorageUnavailableReason(safeStorage = getSafeStorage()) {
 function warnCredentialEncryptionUnavailable(reason) {
     if (credentialEncryptionWarningEmitted) return;
     credentialEncryptionWarningEmitted = true;
-    console.warn('[storage] Credential encryption unavailable; storing credentials in plaintext fallback.', reason);
+    console.warn('[storage] Credential encryption unavailable; keys are kept in memory for this session only and not written to disk.', reason);
 }
 
 function hasCredentialMaterial(credentials) {
@@ -209,6 +213,9 @@ function isEncryptedCredentialsPayload(payload) {
     );
 }
 
+// Returns the on-disk payload, or null when the credentials must not be
+// written (encryption unavailable AND there is key material). Only an empty
+// credentials object may ever be written unencrypted.
 function encryptCredentialsForDisk(credentials) {
     const normalized = normalizeCredentials(credentials);
     const safeStorage = getSafeStorage();
@@ -216,6 +223,7 @@ function encryptCredentialsForDisk(credentials) {
     if (unavailableReason) {
         if (hasCredentialMaterial(normalized)) {
             warnCredentialEncryptionUnavailable(unavailableReason);
+            return null;
         }
         return normalized;
     }
@@ -247,7 +255,15 @@ function decryptCredentialsPayload(payload) {
 }
 
 function writeCredentialsFile(credentials) {
-    return writeJsonFile(getCredentialsPath(), encryptCredentialsForDisk(credentials));
+    const payload = encryptCredentialsForDisk(credentials);
+    if (payload === null) return false; // fail closed: never write keys in plaintext
+    return writeJsonFile(getCredentialsPath(), payload);
+}
+
+// Lets the renderer tell the user when keys are session-only on this PC.
+function getCredentialStorageStatus() {
+    const reason = getSafeStorageUnavailableReason();
+    return { encrypted: reason === null, reason, sessionOnly: reason !== null };
 }
 
 function migratePlaintextCredentialsIfNeeded(rawPayload, credentials) {
@@ -393,6 +409,11 @@ function updateConfig(key, value) {
 // ============ CREDENTIALS ============
 
 function getCredentials() {
+    if (sessionCredentials) return { ...sessionCredentials };
+    return readCredentialsFromDisk();
+}
+
+function readCredentialsFromDisk() {
     const rawPayload = readJsonFile(getCredentialsPath(), DEFAULT_CREDENTIALS);
     if (isEncryptedCredentialsPayload(rawPayload)) {
         return decryptCredentialsPayload(rawPayload);
@@ -406,6 +427,26 @@ function getCredentials() {
 function setCredentials(credentials) {
     const current = getCredentials();
     const updated = { ...current, ...credentials };
+    const unavailableReason = getSafeStorageUnavailableReason();
+    if (unavailableReason) {
+        // Fail closed: keep the keys for this session only. An existing legacy
+        // plaintext file is left untouched (still readable on the next launch),
+        // except when the user has cleared every key: the empty defaults hold
+        // no key material, so writing them removes the old plaintext keys from
+        // disk as the user expects. An encrypted file is never touched here —
+        // it may just be undecryptable right now.
+        sessionCredentials = updated;
+        if (hasCredentialMaterial(updated)) {
+            warnCredentialEncryptionUnavailable(unavailableReason);
+        } else {
+            const rawPayload = readJsonFile(getCredentialsPath(), null);
+            if (rawPayload && !isEncryptedCredentialsPayload(rawPayload) && hasCredentialMaterial(rawPayload)) {
+                writeCredentialsFile(DEFAULT_CREDENTIALS);
+            }
+        }
+        return true;
+    }
+    sessionCredentials = null;
     return writeCredentialsFile(updated);
 }
 
@@ -747,6 +788,7 @@ function deleteAllSessions() {
 // could not be removed so the UI can say so instead of claiming success.
 function clearAllData() {
     console.log('[storage] Clearing all local data');
+    sessionCredentials = null;
     const failed = [];
     for (const dir of [getConfigDir(), getLegacyConfigDir()]) {
         try {
@@ -762,6 +804,7 @@ function clearAllData() {
 function _setSafeStorageForTest(safeStorage) {
     safeStorageForTest = safeStorage;
     credentialEncryptionWarningEmitted = false;
+    sessionCredentials = null;
 }
 
 module.exports = {
@@ -785,6 +828,7 @@ module.exports = {
     // Credentials
     getCredentials,
     setCredentials,
+    getCredentialStorageStatus,
     getApiKey,
     setApiKey,
     getGroqApiKey,

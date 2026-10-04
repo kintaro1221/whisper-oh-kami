@@ -162,16 +162,21 @@ const JA = {
     'wizard.next': '次へ',
     'wizard.skip': 'スキップ',
     'wizard.gemini.title': 'Gemini キーを取得（必須）',
-    'wizard.gemini.lead': '無料枠でOK・課金なし・約1分。下のボタンで AI Studio を開き、「Create API key」を押します。',
+    'wizard.gemini.lead':
+        '無料枠でOK・約1分。無料枠を超えた分は Google から請求されます。対応しているのは Gemini のみです（OpenAI / Claude のキーは使えません）。下のボタンで AI Studio を開き、「Create API key」を押します。',
     'wizard.gemini.open': 'AI Studio を開く',
     'wizard.deepgram.title': 'Deepgram キー（任意・文字起こし精度UP）',
-    'wizard.deepgram.lead': '相手の声の文字起こし精度を上げます。任意です。下のボタンで Deepgram を開き、API キーを作成します。',
+    'wizard.deepgram.lead':
+        '相手の声の文字起こし精度を上げます。任意です。登録時の無料クレジットで始められ、使い切った分は Deepgram から請求されます。下のボタンで Deepgram を開き、API キーを作成します。',
     'wizard.deepgram.open': 'Deepgram を開く',
     'wizard.deepgram.privacy': '⚠ 有効にすると音声（マイク／相手）が Deepgram（米国）に送信されます。',
     'wizard.verify.checking': '確認中…',
     'wizard.verify.ok': '✓ つながりました',
     'wizard.verify.invalid': '✗ このキーは無効です',
     'wizard.verify.network': '確認できませんでした（保存はしました）',
+    'credentials.session_only.title': 'この PC では API キーを暗号化して保存できません',
+    'credentials.session_only.body':
+        'キーは暗号化せずに保存しないため、このセッションの間だけ保持し、アプリを閉じると消えます。次回起動時にもう一度入力してください。',
     'wizard.done.title': '準備できました',
     'wizard.done.start': 'セッションを開始',
 

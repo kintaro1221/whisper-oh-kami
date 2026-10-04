@@ -52,6 +52,7 @@ function buildSupportSnapshot({
     electronVersion = '',
     osInfo = {},
     safeStorageAvailable = false,
+    credentialStorageSessionOnly = false,
     preferences = {},
     credentials = {},
     sessions = [],
@@ -71,6 +72,7 @@ function buildSupportSnapshot({
             release: osInfo.release || '',
             arch: osInfo.arch || '',
             safeStorageAvailable: !!safeStorageAvailable,
+            credentialStorageSessionOnly: !!credentialStorageSessionOnly,
         },
         settings: {
             providerMode: preferences.providerMode || '',

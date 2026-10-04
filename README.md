@@ -35,12 +35,15 @@
 | **byok**（検証中）  | Gemini API キー | Deepgram nova-3 (任意) または Gemini Live | Deepgram キー＋「クラウド優先」選択時のみ | あり（Gemini 2.5 系は新規キーで動かない可能性） |
 | **local**（検証中） | 不要 (Ollama)   | 端末内 Whisper (既定 Small)               | 動かない                                  | Ollama（ホストがこの PC なら外部送信なし）      |
 
+外部サービスで対応しているのは **Google Gemini（AI キー）と Deepgram（文字起こし）の 2 つだけ**で、どちらも無料枠があります。無料枠を超えた分は各サービスからご自身に直接請求されます（料金や無料枠の条件は各サービスが変更することがあります）。OpenAI / Claude など、ほかの AI サービスのキーは使えません。
+
 非エンジニアの方は、BYOK 画面の「🧭 はじめての方：ガイド付きで設定」から、キー取得〜貼り付け〜接続確認まで画面内ガイドで完了できます。
 
 ## 保存されるデータと削除
 
 - 商談ごとの文字起こし・AI の助言・画面分析の結果は、この PC の `%APPDATA%\whisper-oh-kami-config\history` に**平文 JSON** で保存されます。**自動削除はありません**。
 - 設定 →「プライバシーとデータ」→「すべてのデータを削除」は、この設定フォルダ全体（履歴・API キー・設定）と、旧バージョンの設定フォルダ `cheating-daddy-config` を削除します。
+- API キーは Electron の safeStorage（Windows では DPAPI）で暗号化して `credentials.json` に保存します。暗号化が使えない環境では、キーをディスクに書かず、そのセッションの間だけメモリに保持します。
 - Whisper モデルのキャッシュと、「サポート用に書き出す」で書き出したファイルは削除されません。
 
 ## セットアップ
@@ -78,7 +81,7 @@ WhisperOhKAMI is a real-time **whispering** copilot for Japanese B2B sales disco
 ### Three modes
 
 - **`trial`** (default, keyless) — on-device Whisper on the mic only + regex 5-element bar. No API key, no AI replies, nothing sent off-device.
-- **`byok`** (beta) — your own Gemini key unlocks AI replies and LLM hybrid refinement. The counterpart's audio (system audio) is sent to Gemini Live (Google, US) with your key, even when Deepgram is turned off. The 5-element bar only moves when a Deepgram key is entered and "Cloud Speed" is selected under Settings → Speech recognition engine. The Gemini 2.5 series may not work with newly created keys.
+- **`byok`** (beta) — your own Gemini key unlocks AI replies and LLM hybrid refinement. The counterpart's audio (system audio) is sent to Gemini Live (Google, US) with your key, even when Deepgram is turned off. The 5-element bar only moves when a Deepgram key is entered and "Prefer cloud" is selected under Settings → Speech recognition engine. The Gemini 2.5 series may not work with newly created keys.
 - **`local`** (beta) — Ollama + on-device Whisper. Nothing leaves the device when the Ollama host is this PC (default 127.0.0.1); a remote Ollama host receives the transcripts. The 5-element bar does not move in this mode.
 
 ### Setup
@@ -93,6 +96,7 @@ Pick a mode in onboarding. Windows-first (macOS limited, Linux mic-only). Trial 
 
 - STT: on-device Whisper Small (default, bundled). Tiny (bundled) and the optional kotoba-whisper-v2.2-ONNX (Apache-2.0, downloaded on first use) are also available. Deepgram nova-3 is opt-in via the BYOK Deepgram key (or `DEEPGRAM_API_KEY`); cloud mode sends audio to Deepgram (US).
 - Trial keeps audio on-device; local does too when the Ollama host is this PC (default 127.0.0.1). BYOK sends the counterpart's audio to Gemini Live (Google, US) and, when enabled, audio to Deepgram (US) — always with your own keys. No telemetry. The only call home is a one-time version check at startup (`whisperohkami.pages.dev/api/release/latest`); no audio, transcripts or settings are sent.
+- API keys are encrypted with Electron safeStorage (DPAPI on Windows) before they are written to `credentials.json`. Where encryption is unavailable, keys are never written to disk; they are kept in memory for the current session only.
 - Profiles: `discovery` / `sales` only (default `sales`); JP-tuned prompts that ban proposing or scripted talk.
 
 WhisperOhKAMI is a fork of [sohzm/cheating-daddy](https://github.com/sohzm/cheating-daddy) (GPLv3), modified by kintaro1221 since May 2026 (notice per GPLv3 §5(a); the complete modified source ships alongside every binary). Licensed under GPL-3.0. Source at [github.com/kintaro1221/whisper-oh-kami](https://github.com/kintaro1221/whisper-oh-kami).

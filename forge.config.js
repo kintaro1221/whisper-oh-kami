@@ -77,6 +77,16 @@ module.exports = {
             CompanyName: 'WhisperOhKAMI',
             InternalName: 'WhisperOhKAMI',
         },
+        // Explorer's Properties > Details "Copyright" row (VERSIONINFO
+        // LegalCopyright). @electron/packager takes this from
+        // `appCopyright`, NOT from win32metadata.LegalCopyright — the 0.7.7
+        // release candidate set the latter and shipped Electron's default
+        // "Copyright (C) 2015 GitHub, Inc." (tests/unit/forgeConfigIgnore
+        // pins appCopyright). Name the current copyright holder + license only
+        // (the sohzm/cheating-daddy fork attribution lives in README/LICENSE,
+        // not in the exe resource). Keep it ASCII-safe: it is written into the
+        // resource verbatim.
+        appCopyright: 'Copyright (C) 2026 kintaro1221. Licensed under GPL-3.0.',
         // ── Packager ignore: FAIL-CLOSED ALLOWLIST ──────────────────────────
         //
         // electron-packager copies the entire project directory into
@@ -118,6 +128,13 @@ module.exports = {
             // `/package.json`: required by Electron itself to resolve `main`.
             if (p === '/package.json') return false;
 
+            // `/src/i18n/__tests__` and everything under it: Jest tests
+            // that live next to the i18n catalogs (jest.config.js matches
+            // src/**/__tests__/**). Test code is never loaded at runtime and
+            // 0.7.6 shipped it inside app.asar. Checked BEFORE the /src
+            // allowlist below so the exclusion wins.
+            if (p === '/src/i18n/__tests__' || p.startsWith('/src/i18n/__tests__/')) return true;
+
             // `/src` and everything under it: the entire app source tree
             // (main process, preload, renderer, assets, i18n).
             if (p === '/src' || p.startsWith('/src/')) return false;
@@ -136,6 +153,12 @@ module.exports = {
                 // `asar extract` exposed them to every user. Nothing under
                 // .cache is ever required at runtime.
                 if (/^\/node_modules\/\.cache($|\/)/.test(p)) return true;
+
+                // Exclude Vite's dependency pre-bundle cache
+                // (node_modules/.vite). Like .cache above it is dev-server
+                // state written on the developer machine, never required at
+                // runtime; 0.7.6 shipped it inside app.asar by accident.
+                if (/^\/node_modules\/\.vite($|\/)/.test(p)) return true;
 
                 // Exclude `onnxruntime-web` entirely. The
                 // @huggingface/transformers backend resolver picks
@@ -198,7 +221,18 @@ module.exports = {
         // `resources/` directory, at `resources/whisper-models/<org>/<model>/...` —
         // matching the layout src/utils/localai.js's
         // getBundledWhisperModelsRoot() expects.
-        extraResource: ['./src/assets/daddyAudioCapture.exe', './LICENSE', './THIRD_PARTY_NOTICES.md', './resources/whisper-models'],
+        // './node_modules/electron/dist/LICENSES.chromium.html': Electron's
+        // own aggregate notice for Chromium / Node.js / V8 and their
+        // third-party components. electron-packager already drops it next to
+        // the exe, but THIRD_PARTY_NOTICES.md points readers at resources/,
+        // so ship a copy there too, alongside LICENSE and the notices file.
+        extraResource: [
+            './src/assets/daddyAudioCapture.exe',
+            './LICENSE',
+            './THIRD_PARTY_NOTICES.md',
+            './node_modules/electron/dist/LICENSES.chromium.html',
+            './resources/whisper-models',
+        ],
         name: 'WhisperOhKAMI',
         appBundleId: 'ai.whisperohkami.app',
         icon: 'src/assets/logo',
@@ -237,6 +271,16 @@ module.exports = {
                 shortcutName: 'WhisperOhKAMI',
                 createDesktopShortcut: true,
                 createStartMenuShortcut: true,
+                // Icon of Setup.exe itself (packagerConfig.icon only covers
+                // the packaged app exe).
+                setupIcon: 'src/assets/logo.ico',
+                // Squirrel writes this URL into the nuspec's <iconUrl>, which
+                // is what Windows "Apps & features" / Add or Remove Programs
+                // shows for the installed app. Without it the default
+                // Squirrel/Atom icon appears there. Must be an http(s) URL
+                // (file: is rejected); served from lp/public/logo.ico, a
+                // copy of src/assets/logo.ico.
+                iconUrl: 'https://whisperohkami.pages.dev/logo.ico',
             },
         },
         {

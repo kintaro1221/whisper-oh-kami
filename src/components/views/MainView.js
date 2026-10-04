@@ -769,6 +769,7 @@ export class MainView extends LitElement {
         _groqKey: { state: true },
         _openaiKey: { state: true },
         _keyError: { state: true },
+        _credSessionOnly: { state: true }, // keys cannot be stored encrypted on this PC
         // Local AI state
         _ollamaHost: { state: true },
         _ollamaModel: { state: true },
@@ -797,6 +798,7 @@ export class MainView extends LitElement {
         this._groqKey = '';
         this._openaiKey = '';
         this._keyError = false;
+        this._credSessionOnly = false;
         this._showLocalHelp = false;
         this._ollamaHost = 'http://127.0.0.1:11434';
         this._ollamaModel = 'gemma3:4b';
@@ -831,6 +833,11 @@ export class MainView extends LitElement {
             // Load from credentials directly (not getDeepgramApiKey) so a host
             // DEEPGRAM_API_KEY env var never leaks into the visible input field.
             this._deepgramKey = creds.deepgramApiKey || '';
+            const credStatus =
+                typeof whisperOhKami.storage.getCredentialStorageStatus === 'function'
+                    ? await whisperOhKami.storage.getCredentialStorageStatus().catch(() => null)
+                    : null;
+            this._credSessionOnly = !!(credStatus && credStatus.sessionOnly);
 
             // Load local AI settings
             this._ollamaHost = prefs.ollamaHost || 'http://127.0.0.1:11434';
@@ -1359,6 +1366,13 @@ export class MainView extends LitElement {
         return html`
             <button class="wizard-entry" @click=${this._openWizard}>${t('wizard.entry_button')}</button>
             <div class="wizard-or">${t('wizard.or_direct')}</div>
+            ${
+                this._credSessionOnly
+                    ? html`<div class="form-group help-warn" role="note">
+                          <strong>${t('credentials.session_only.title')}</strong><br />${t('credentials.session_only.body')}
+                      </div>`
+                    : ''
+            }
             <div class="form-group">
                 <label class="form-label">${t('main.api.gemini_label')}</label>
                 <input

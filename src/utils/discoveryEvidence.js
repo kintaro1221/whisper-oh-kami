@@ -41,15 +41,36 @@ const PARTIAL_PATTERNS = {
     timeline: /来月|今期|期末|来年度|上期|下期|Q[1-4]|期限|締切|スケジュール|急ぎ|緊急|までに|今年中|年内/,
 };
 
+// Concrete pain, second form: a symptom stated together with a frequency /
+// volume / process marker in the same sentence, in either order
+// (「毎週入力ミスが起きています」「手入力に5時間かかって困っています」
+// 「受信箱に分散していて、返信漏れが出ています」). A bare symptom
+// (「ミスが心配です」) has no marker and stays a keyword hit. Words listed in
+// both sets (手作業 / 属人 / 分散 …) need two separate occurrences, since the
+// symptom and the marker cannot overlap.
+const PAIN_DEPARTMENT_RE =
+    /(?:営業|経理|開発|人事|総務|事務|現場|工場|店舗|物流|サポート|顧客対応|採用|請求|決算|月次|年次).{0,20}(?:困|大変|疲弊|属人|遅|止|手作業|ミス|漏れ)|できない|難しい/;
+const PAIN_SYMPTOM_RE = /困|大変|疲弊|属人|遅れ|止ま|手作業|手入力|二重入力|ミス|漏れ|分散|滞|抜け|重複|手間|工数がかか|時間がかか/;
+const PAIN_MARKER_RE = /毎日|毎週|毎月|月\d+件|週\d+件|\d+件|\d+人|二重|手入力|手作業|分散|属人/;
+const PAIN_SYMPTOM_WITH_MARKER_SRC =
+    `(?:${PAIN_SYMPTOM_RE.source}).{0,30}(?:${PAIN_MARKER_RE.source})` + `|(?:${PAIN_MARKER_RE.source}).{0,30}(?:${PAIN_SYMPTOM_RE.source})`;
+
+// Relative deadline forms a customer states as a commitment (「今月30日」
+// 「来月末」「年内」「2週間以内」). Kept as said — resolving them to absolute
+// dates is a display concern, not detection.
+const TIMELINE_ABSOLUTE_RE =
+    /(?:\d+|[一二三四五六七八九十百千万億]+)\s*月(?:末|まで|頃)?|\d+\/\d+|(?:\d+|[一二三四五六七八九十百千万億]+)\s*年度|までに.{0,20}(?:したい|必要|決めたい|入れたい)/;
+const TIMELINE_RELATIVE_RE =
+    /(?:今月|来月|再来月|翌月)\s*(?:\d+|[一二三四五六七八九十]+)\s*日|(?:今月|来月|再来月)末|今月中|年内|今年中|今期中|来期(?:中|初|末)|上期末|下期末|(?:\d+|[一二三四五六七八九十]+)\s*週間以内|(?:\d+|[一二三四五六七八九十]+)\s*[かヶケカ]?月以内/;
+
 // Numeric matchers accept either ASCII digits or 漢数字 (一二三四五六七八九十百千万億).
 // Real Japanese sales speech mixes both forms ("一千万円" vs "10000000円").
 const FILLED_PATTERNS = {
-    pain: /(?:営業|経理|開発|人事|総務|事務|現場|工場|店舗|物流|サポート|顧客対応|採用|請求|決算|月次|年次).{0,20}(?:困|大変|疲弊|属人|遅|止|手作業|ミス|漏れ)|できない|難しい/,
+    pain: new RegExp(`${PAIN_DEPARTMENT_RE.source}|${PAIN_SYMPTOM_WITH_MARKER_SRC}`),
     kpi: /(?:\d+|[一二三四五六七八九十百千万億]+)\s*(?:件|時間|工数|％|%)/,
     authority: /(?:役員|取締役|部長|課長|マネージャ|社長|常務|専務|本部長).{0,12}(?:が|は|で)?(?:決め|決裁(?:し|す|され)|判断|承認|です|になり|担当)/,
     budget: /(?:\d+|[一二三四五六七八九十百千万億]+)\s*(?:円|万円|千万|億|億円)/,
-    timeline:
-        /(?:\d+|[一二三四五六七八九十百千万億]+)\s*月(?:末|まで|頃)?|\d+\/\d+|(?:\d+|[一二三四五六七八九十百千万億]+)\s*年度|までに.{0,20}(?:したい|必要|決めたい|入れたい)/,
+    timeline: new RegExp(`${TIMELINE_ABSOLUTE_RE.source}|${TIMELINE_RELATIVE_RE.source}`),
 };
 
 // ── Polarity (v0.7.5): a concrete match inside a negated / hypothetical /
@@ -73,7 +94,7 @@ function splitSentences(text) {
 }
 
 const NEGATION_RE =
-    /ではな[いく]|じゃな[いく]|わけではな|ありません|ございません|未定|白紙|決まって(?:い)?ません|まだ(?:決|な)|ない(?:です|ので|んです)?[。．、]?$/;
+    /ではな[いく]|じゃな[いく]|わけではな|ありません|ございません|未定|白紙|決まって(?:い)?ません|決められません|決まりません|まだ(?:決|な)|ない(?:です|ので|んです)?[。．、]?$/;
 // Set phrases that contain a negative form but are agreement / politeness,
 // not a negation of the stated value. Removed before NEGATION_RE runs.
 const NEGATION_EXCLUSION_RE =
@@ -120,10 +141,22 @@ function isRetraction(text) {
 
 // Pain is itself voiced in the negative (「できない」「減らない」「余裕があり
 // ません」), so the 'negated' tag would downgrade the very signal it should
-// detect. Negation therefore only applies to the value-bearing elements;
-// hypothetical / third-party framing still applies to pain.
-function effectivePolarity(key, polarity) {
-    if (key === 'pain' && polarity === 'negated') return null;
+// detect. Negation therefore only applies to pain when the sentence denies
+// the symptom itself (「毎週ミスが出ているわけではありません」「困っては
+// いません」「ミスは起きていません」); hypothetical / third-party framing
+// always applies to pain. The denial forms are narrow on purpose: a bare
+// 「出ていない」 is itself a pain (「成果が出ていない」), so the verb form
+// only counts after a symptom noun.
+const PAIN_DENIAL_RE =
+    /(?:わけ|ほど)(?:では|じゃ)(?:な|あり|ござ)|困って(?:は|も)?(?:い)?(?:ません|ない)|(?:ミス|漏れ|遅れ|抜け|重複|トラブル)(?:は|が|も)?(?:特に)?(?:起きて|出て|発生して)(?:は|も)?(?:い)?(?:ません|ない)/;
+
+function effectivePolarity(key, polarity, sentence) {
+    if (key === 'pain') {
+        const denied = typeof sentence === 'string' && PAIN_DENIAL_RE.test(sentence);
+        // NEGATION_RE does not catch every denial (「…いません」), so a pain
+        // denial is tagged here even when classifyPolarity found none.
+        if (polarity === 'negated' || polarity === null) return denied ? 'negated' : null;
+    }
     return polarity;
 }
 
@@ -183,7 +216,7 @@ function correctionAfterDewanaku(key, sentence) {
     const before = sentence.slice(0, idx);
     const after = sentence.slice(idx + 'ではなく'.length);
     if (!FILLED_PATTERNS[key].test(before) || !FILLED_PATTERNS[key].test(after)) return null;
-    if (effectivePolarity(key, classifyPolarity(after))) return null;
+    if (effectivePolarity(key, classifyPolarity(after), after)) return null;
     return after;
 }
 
@@ -340,7 +373,7 @@ function createDiscoveryEvidence(options = {}) {
                 // user's retractElement() does.
                 for (const e of el.evidence) e.retracted = true;
                 push({ specificity: 'keyword', polarity: 'retraction' });
-                if (FILLED_PATTERNS[key].test(parts.after) && !effectivePolarity(key, classifyPolarity(parts.after))) {
+                if (FILLED_PATTERNS[key].test(parts.after) && !effectivePolarity(key, classifyPolarity(parts.after), parts.after)) {
                     push({ specificity: 'concrete', polarity: null });
                 }
                 continue;
@@ -357,7 +390,7 @@ function createDiscoveryEvidence(options = {}) {
 
             const specificity = matchElement(key, sentence);
             if (!specificity) continue;
-            const polarity = effectivePolarity(key, classifyPolarity(sentence));
+            const polarity = effectivePolarity(key, classifyPolarity(sentence), sentence);
             const candidate = { specificity: polarity ? 'keyword' : specificity, polarity, rank: rowRank(specificity, polarity) };
             if (!pending || candidate.rank > pending.rank) pending = candidate;
         }
@@ -433,7 +466,7 @@ function createDiscoveryEvidence(options = {}) {
                 // Grounded downgrade only: the quote must exist in the
                 // transcript AND read as a negation / retraction.
                 if (!quote || !quoteIsGrounded(quote, transcriptStr)) continue;
-                if (!(isRetraction(quote) || effectivePolarity(key, classifyPolarity(quote)) === 'negated')) continue;
+                if (!(isRetraction(quote) || effectivePolarity(key, classifyPolarity(quote), quote) === 'negated')) continue;
                 const hadLive = state[key].evidence.some(e => !e.retracted && e.specificity === 'concrete');
                 if (!hadLive) continue;
                 // Retract the rows but keep a user confirmation intact.
@@ -450,7 +483,7 @@ function createDiscoveryEvidence(options = {}) {
                 if (!quote || !quoteIsGrounded(quote, transcriptStr)) continue;
                 if (quoteMatchesRetractedRow(state[key], quote)) continue;
                 const context = sentenceContainingQuote(quote, transcriptStr) || quote;
-                const polarity = effectivePolarity(key, classifyPolarity(context));
+                const polarity = effectivePolarity(key, classifyPolarity(context), context);
                 const specificity = r.status === 'filled' && !polarity ? 'concrete' : 'keyword';
                 state[key].evidence.push({ text: quote, timestamp: ts, specificity, source: 'llm', polarity, retracted: false });
             } else {
@@ -467,10 +500,14 @@ function createDiscoveryEvidence(options = {}) {
     }
 
     // Manual user actions (v0.7.5). Only the user can promote an element to
-    // 'confirmed'; automatic detection tops out at 'detected'.
+    // 'confirmed'; automatic detection tops out at 'detected'. An element
+    // with no live (non-retracted) evidence cannot be confirmed: the UI only
+    // offers the confirm button once evidence exists, and the model enforces
+    // the same rule so a stray call cannot mark an 'empty' element confirmed.
     function confirmElement(key) {
         if (!ELEMENT_KEYS.includes(key)) return { state: dump(), changed: false };
         if (state[key].confirmed) return { state: dump(), changed: false };
+        if (!state[key].evidence.some(e => !e.retracted)) return { state: dump(), changed: false };
         state[key].confirmed = true;
         state[key].status = computeStatus(state[key]);
         state[key].lastUpdate = now();
