@@ -109,3 +109,6 @@ out/
 # Bundled Whisper model files, fetched by scripts/fetch-whisper-models.mjs
 # per scripts/whisper-models.manifest.json (the manifest itself IS tracked).
 resources/
+
+# session scratch docs and regression run output (never committed)
+tmp/

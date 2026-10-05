@@ -519,6 +519,19 @@ function pushTurnEvent(event) {
     return pushed;
 }
 
+const DEV_PUSH_TURN_SPEAKERS = new Set(['opponent', 'self']);
+
+// Backs the dev:push-turn IPC handler (WOK_DEV=1 only). Validates the turn
+// and feeds it through pushTurnEvent exactly like a transcription result.
+function devPushTurn(payload) {
+    if (process.env.WOK_DEV !== '1') return { success: false, reason: 'dev_disabled' };
+    const { speaker, text } = payload && typeof payload === 'object' ? payload : {};
+    if (!DEV_PUSH_TURN_SPEAKERS.has(speaker)) return { success: false, reason: 'invalid_speaker' };
+    if (typeof text !== 'string' || !text.trim()) return { success: false, reason: 'empty_text' };
+    pushTurnEvent({ speaker, text: text.trim(), source: 'dev_push_turn' });
+    return { success: true, state: discoveryEvidenceStore.getState() };
+}
+
 function recentTurnsForPrompt(maxTurns) {
     return turnEventsStore.recentTurnsForPrompt(maxTurns);
 }
@@ -1806,6 +1819,17 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
         return discoveryEvidenceStore.getState();
     });
 
+    // Real-machine UI check without audio: push one transcribed turn through
+    // the same pushTurnEvent hook every STT producer calls, so it reaches the
+    // turn log, the 5-element store, the renderer's discovery-evidence-update
+    // and (opponent turns) the Discovery LLM refiner. The other dev:* handlers
+    // only read state; this one writes, so it is refused unless the app was
+    // launched with WOK_DEV=1 (checked per call — a packaged build without the
+    // env var never accepts it). DevTools: await devPushTurn({ speaker: 'opponent', text: '予算は年間100万円です' })
+    ipcMain.handle('dev:push-turn', async (event, payload) => {
+        return devPushTurn(payload);
+    });
+
     ipcMain.handle('dev:dump-deepgram-status', async () => {
         return {
             keyConfigured: !!getDeepgramApiKey(),
@@ -1861,10 +1885,24 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
     // v0.7.5 manual evidence actions. Automatic detection tops out at
     // 'detected'; only the user (after hearing it from the customer) can mark an
     // element 'confirmed', and retract clears a wrong candidate back to empty.
+    //
+    // v0.7.8: select and confirm both return { success, reason }. reason is
+    // null on success, otherwise the store's refusal reason —
+    //   select:  'no_conflict' | 'row_not_live' | 'unknown_row'
+    //   confirm: 'already_confirmed' | 'no_candidate' | 'conflict_unresolved' | 'basis_unknown'
+    // Selecting a conflict value is not the customer's confirmation: the
+    // element stays 'candidate' until the user presses ✓ (policy §6 T3/T4).
+    // Contract pinned in tests/unit/evidenceIpc.test.js.
+    ipcMain.handle('discovery-evidence-select', async (event, key, rowId) => {
+        const result = discoveryEvidenceStore.selectEvidence(String(key || ''), Number(rowId));
+        if (result.changed) sendToRenderer('discovery-evidence-update', result.state);
+        return { success: result.changed, reason: result.reason || null };
+    });
+
     ipcMain.handle('discovery-evidence-confirm', async (event, key) => {
         const result = discoveryEvidenceStore.confirmElement(String(key || ''));
         if (result.changed) sendToRenderer('discovery-evidence-update', result.state);
-        return { success: result.changed };
+        return { success: result.changed, reason: result.reason || null };
     });
 
     ipcMain.handle('discovery-evidence-retract', async (event, key) => {
@@ -1900,6 +1938,16 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
             clearPendingAi();
             currentSessionId = null;
             disconnectDeepgram();
+            // v0.7.8 (regression fixture L05): closing is a reset of the
+            // hearing state, not just of the audio paths. Clear the turn log
+            // and the 5-element evidence now — not at the next start — and
+            // push the empty state to the renderer, so a late result of the
+            // closed session finds nothing to resurrect and the badges read
+            // empty immediately. The conversation itself was already saved
+            // through save-conversation-turn.
+            turnEventsStore.resetForSession();
+            discoveryEvidenceStore.reset();
+            sendToRenderer('discovery-evidence-update', discoveryEvidenceStore.getState());
 
             if (currentProviderMode === 'local' || currentProviderMode === 'trial') {
                 getLocalAi().closeLocalSession();

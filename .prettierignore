@@ -6,3 +6,5 @@ out/
 coverage/
 # Generated from verbatim upstream license texts; regenerate with npm run notices.
 THIRD_PARTY_NOTICES.md
+# Validation-team fixture kept byte-identical to its source ZIP (sha256 pinned).
+tests/fixtures/sales_regression_cases.json

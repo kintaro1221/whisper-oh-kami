@@ -36,6 +36,33 @@ describe('v0.7.5: candidate / confirmed evidence strings exist in ja and en', ()
         'assistant.evidence.polarity.retraction',
         'assistant.evidence.retracted',
         'assistant.help.candidates_complete',
+        // v0.7.8 candidate tier / conflict / ✓ confirmation step
+        'assistant.badge.candidate_hint',
+        'assistant.evidence.tag.tentative',
+        'assistant.evidence.tag.wish',
+        'assistant.evidence.tag.conflict',
+        'assistant.evidence.tag.conflict_unknown',
+        'assistant.evidence.tag.selected',
+        'assistant.evidence.tag.set_aside',
+        'assistant.evidence.tag.kept',
+        'assistant.evidence.tag.current',
+        'assistant.evidence.confirm_prompt',
+        'assistant.evidence.confirm_yes',
+        'assistant.evidence.confirm_no',
+        'assistant.evidence.refusal.conflict_unresolved',
+        'assistant.evidence.refusal.basis_unknown',
+        'assistant.evidence.refusal.no_candidate',
+        'assistant.evidence.select',
+        'assistant.evidence.conflict_title',
+        'assistant.evidence.conflict_unknown_title',
+        'assistant.evidence.actions_section',
+        'assistant.evidence.confirmation_record',
+        'assistant.evidence.cleared_record',
+        'assistant.evidence.cleared.retraction',
+        'assistant.evidence.cleared.conflict',
+        'assistant.evidence.cleared.manual',
+        'assistant.evidence.retracted_label',
+        'assistant.evidence.values_label',
     ];
     for (const key of keys) {
         test(`${key} is defined in ja and en`, () => {
@@ -49,7 +76,24 @@ describe('v0.7.5: candidate / confirmed evidence strings exist in ja and en', ()
         for (const table of [ja, en]) {
             expect(table['assistant.progress.counts']).toContain('{detected}');
             expect(table['assistant.progress.counts']).toContain('{confirmed}');
+            expect(table['assistant.progress.counts']).toContain('{candidate}');
         }
+    });
+    test('v0.7.8 placeholders survive in each locale', () => {
+        for (const table of [ja, en]) {
+            expect(table['assistant.evidence.tag.conflict']).toContain('{n}');
+            expect(table['assistant.evidence.confirm_prompt']).toContain('{value}');
+            expect(table['assistant.evidence.confirmation_record']).toContain('{value}');
+            expect(table['assistant.evidence.confirmation_record']).toContain('{time}');
+            expect(table['assistant.evidence.cleared_record']).toContain('{reason}');
+            expect(table['assistant.evidence.cleared_record']).toContain('{time}');
+            expect(table['assistant.evidence.retracted_label']).toContain('{n}');
+        }
+    });
+    test('the ✓ button names what it attests (customer confirmation, not a value choice)', () => {
+        expect(ja['assistant.evidence.confirm']).toBe('相手に確認済みにする');
+        expect(ja['assistant.evidence.select']).toBe('この値を候補として残す');
+        expect(ja['assistant.progress.counts']).toBe('候補 {detected} / 仮 {candidate} / 確認 {confirmed} / 5');
     });
     test('new strings never name the upstream project', () => {
         for (const table of [ja, en]) {
@@ -224,5 +268,42 @@ describe('v0.7.5 final review: copy accuracy (5-element bar, Ollama host, brandi
         const guidance = read('docs/legal/recording-guidance.md');
         const row = guidance.split('\n').find(l => l.startsWith('| local-whisper / local-ollama'));
         expect(row).toMatch(/Ollama のホストをこの PC 以外/);
+    });
+});
+
+// v0.7.8 follow-up: trial has no speaker separation (mic only, every turn is
+// treated as the counterpart's). The mode card, the onboarding choice, the
+// live-bar badge hover and the README must say so before the user trusts a
+// candidate. See docs/decisions/2026-10-05-trial-speaker-unidentified.md.
+describe('v0.7.8: trial speaker-unidentified notice', () => {
+    const ja = require('../../src/i18n/ja');
+    const en = require('../../src/i18n/en');
+    const keys = ['main.mode_card.trial.desc', 'onboarding.mode.trial.desc', 'app.live_bar.stt_badge.on_device'];
+    for (const key of keys) {
+        test(`${key} warns about speaker separation in ja and en`, () => {
+            expect(ja[key]).toContain('話者');
+            expect(ja[key]).toContain('区別しません');
+            expect(en[key]).toMatch(/speaker separation|separate speakers/i);
+            expect(ja[key]).not.toMatch(/cheating|daddy/i);
+            expect(en[key]).not.toMatch(/cheating|daddy/i);
+        });
+    }
+    test('the card keeps the short form; the hover and onboarding carry the full sentence', () => {
+        expect(ja['main.mode_card.trial.desc']).toContain('話者は区別しません');
+        expect(en['main.mode_card.trial.desc']).toContain('No speaker separation');
+        for (const key of ['onboarding.mode.trial.desc', 'app.live_bar.stt_badge.on_device']) {
+            expect(ja[key]).toContain('自分の発言も相手の発言として扱われる');
+            expect(ja[key]).toContain('相手に確認してから ✓ を押してください');
+            expect(en[key]).toContain("treated as the counterpart's");
+            expect(en[key]).toContain('before pressing ✓');
+        }
+    });
+    test('README states the limitation in both the Japanese and the English part', () => {
+        const [jaPart, enPart] = read('README.md').split('## English');
+        expect(jaPart).toContain('お試し（`trial`）は話者を区別しません。');
+        expect(jaPart).toContain('候補は相手に確認してから ✓ を押してください。');
+        const trialRow = jaPart.split('\n').find(l => l.startsWith('| **trial**'));
+        expect(trialRow).toContain('話者は区別しません');
+        expect(enPart).toContain('**No speaker separation**');
     });
 });

@@ -88,3 +88,14 @@ tests/unit/paidCloudflareConfig.test.js export-ignore
 tests/unit/paidLegalContract.test.js export-ignore
 tests/unit/paidReleaseBundle.test.js export-ignore
 lp/ export-ignore
+# The 30-case sales-conversation regression fixture is the validation team's
+# deliverable and is not published (2026-10-05 decision); the runner, grader
+# and the tests that replay it go with it.
+tests/fixtures/sales_regression_cases.json export-ignore
+tests/fixtures/README-sales-regression.md export-ignore
+scripts/validate_fixtures.py export-ignore
+scripts/run-regression-cases.mjs export-ignore
+scripts/lib/regression-grader.cjs export-ignore
+tests/unit/regressionRunner.test.js export-ignore
+tests/unit/regressionMainProcess.test.js export-ignore
+tests/unit/regressionLifecycle.test.js export-ignore

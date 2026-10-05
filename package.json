@@ -1,7 +1,7 @@
 {
     "name": "whisper-oh-kami",
     "productName": "WhisperOhKAMI",
-    "version": "0.7.7",
+    "version": "0.7.8",
     "description": "Real-time AI hearing copilot for B2B sales discovery — 商談ヒアリングのささやきの神",
     "main": "src/index.js",
     "scripts": {
@@ -17,7 +17,10 @@
         "notices:check": "node scripts/generate-notices.js --fail-closed",
         "paid-release": "node scripts/build-paid-release.mjs",
         "whisper-models": "node scripts/fetch-whisper-models.mjs",
-        "whisper-models:check": "node scripts/fetch-whisper-models.mjs --check"
+        "whisper-models:check": "node scripts/fetch-whisper-models.mjs --check",
+        "regression:l1": "node scripts/run-regression-cases.mjs --path store-direct",
+        "regression:l2": "jest tests/unit/regressionMainProcess.test.js",
+        "regression:l2b": "jest tests/unit/regressionLifecycle.test.js"
     },
     "keywords": [
         "ai-sales-assistant",

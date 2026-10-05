@@ -270,3 +270,54 @@ describe('buildEvidenceBlock — retracted rows are history, not the current quo
         expect(block).not.toContain('500万円');
     });
 });
+
+// v0.7.8 Task 8 — candidate tier vocabulary. Vocabulary rule: the validation
+// side's "confirmed" (affirmative evidence in the conversation) is product
+// `detected`; product `confirmed` is only the user's manual ✓. A `candidate`
+// is tentative / not agreed / conflicting, so the model must not state its
+// value as settled and should raise the priority of a check question.
+describe('buildEvidenceBlock — candidate tier (v0.7.8)', () => {
+    test('candidate element is labelled as tentative and carries its latest quote', () => {
+        const block = buildEvidenceBlock({
+            elements: {
+                budget: { status: 'candidate', evidence: [{ text: '予算は300万円くらいかな', specificity: 'concrete' }] },
+            },
+        });
+        expect(block).toContain('- 予算 (Budget): candidate（仮・未合意・要確認） ・ 直近: "予算は300万円くらいかな"');
+    });
+
+    test('footer tells the model to prioritise a check question and not assert a candidate value', () => {
+        const block = buildEvidenceBlock({ elements: { budget: { status: 'candidate', evidence: [{ text: '300万円' }] } } });
+        expect(block).toContain('candidate は仮・未合意・競合なので、確認質問の優先度を上げる（値を断定して話さない）');
+    });
+
+    test('non-candidate statuses keep their plain label', () => {
+        const block = buildEvidenceBlock({
+            elements: {
+                budget: { status: 'detected', evidence: [{ text: '予算は100万円です' }] },
+                timeline: { status: 'confirmed', evidence: [{ text: '3月末まで' }] },
+            },
+        });
+        expect(block).toContain('- 予算 (Budget): detected ・ 直近: "予算は100万円です"');
+        expect(block).toContain('- 期限 (Timeline): confirmed ・ 直近: "3月末まで"');
+        expect(block).not.toContain('detected（');
+    });
+
+    test('superseded rows and a non-retracted retraction marker are never quoted (same predicate as isLiveRow)', () => {
+        const block = buildEvidenceBlock({
+            elements: {
+                budget: {
+                    status: 'candidate',
+                    evidence: [
+                        { text: '予算は300万円くらい' },
+                        { text: '予算は500万円です', superseded: true },
+                        { text: '[manual]', source: 'user', polarity: 'retraction' },
+                    ],
+                },
+            },
+        });
+        expect(block).toContain('直近: "予算は300万円くらい"');
+        expect(block).not.toContain('500万円');
+        expect(block).not.toContain('[manual]');
+    });
+});

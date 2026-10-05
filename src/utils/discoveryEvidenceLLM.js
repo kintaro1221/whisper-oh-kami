@@ -58,6 +58,7 @@ const PROMPT_HEADER = [
     '- "filled": 具体的な数値・固有名・期日が出ている',
     '',
     '否定・仮定・他社の話・撤回された内容は filled にしない。撤回・否定された要素は status を empty にし、その撤回・否定の発話を quote に入れる。',
+    '仮・未承認・申請中の額、希望・未合意の時期、同じ項目で食い違う値（競合）は filled にせず partial にし、quote にその条件を述べた文を含める。',
     '',
     'quote は該当する opponent 発話を transcript から原文ママで返す (substring が後で transcript と照合される)。言及が全く無い empty の場合だけ quote は空文字。',
     '',

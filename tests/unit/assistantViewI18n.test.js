@@ -68,6 +68,41 @@ describe('AssistantView i18n extraction', () => {
         });
     });
 
+    // ── v0.7.8: candidate / conflict / ✓ confirmation step go through t() ──
+    describe('v0.7.8 evidence panel strings go through t()', () => {
+        for (const key of [
+            'assistant.badge.candidate_hint',
+            'assistant.evidence.confirm_prompt',
+            'assistant.evidence.confirm_yes',
+            'assistant.evidence.confirm_no',
+            'assistant.evidence.select',
+            'assistant.evidence.conflict_title',
+            'assistant.evidence.conflict_unknown_title',
+            'assistant.evidence.actions_section',
+            'assistant.evidence.confirmation_record',
+            'assistant.evidence.cleared_record',
+            'assistant.evidence.retracted_label',
+            'assistant.evidence.values_label',
+            'assistant.evidence.tag.kept',
+            'assistant.evidence.tag.set_aside',
+        ]) {
+            test(`ja.js has ${key} and AssistantView uses t('${key}')`, () => {
+                const escaped = key.replace(/\./g, '\\.');
+                expect(ja).toMatch(new RegExp(`'${escaped}'`));
+                expect(src).toMatch(new RegExp(`t\\('${escaped}'\\)`));
+            });
+        }
+        test('refusal / tag / cleared texts are looked up through dynamic keys', () => {
+            expect(src).toMatch(/t\(getConfirmRefusalKey\(/);
+            expect(src).toMatch(/t\(tag\.i18nKey\)/);
+            expect(src).toMatch(/t\('assistant\.evidence\.cleared\.' \+/);
+        });
+        test('the candidate count placeholder is filled from candidateCount', () => {
+            expect(src).toMatch(/\.replace\('\{candidate\}', /);
+            expect(src).toMatch(/candidateCount/);
+        });
+    });
+
     // ── 未確認 fallback も i18n 化（取りこぼし回帰防止）──
     describe('unconfirmed fallback is i18n', () => {
         test('ja.js has assistant.evidence.unconfirmed', () => {

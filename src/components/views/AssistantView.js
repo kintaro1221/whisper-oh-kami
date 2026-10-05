@@ -650,11 +650,32 @@ export class AssistantView extends LitElement {
             color: var(--accent);
         }
 
+        .dp-badge.dp-status-candidate {
+            /* candidate (◐ + 付箋) — 仮・未合意・値の食い違い。warning 系の点線枠:
+               detected (accent 点線) とも partial (warning 塗り) とも見分けがつく */
+            border-color: var(--warning);
+            border-style: dashed;
+            color: var(--text-primary);
+        }
+
         .dp-badge.dp-status-confirmed {
             /* confirmed (✓) — ユーザーが相手に確認済み。accent (navy) 塗り、白文字 */
             background: var(--accent);
             border-color: var(--accent);
             color: #ffffff;
+        }
+
+        .dp-badge-tag {
+            font-size: 10px;
+            line-height: 1.3;
+            padding: 0 4px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--warning);
+            color: var(--warning);
+            max-width: 9em;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .dp-badge-label {
@@ -725,6 +746,12 @@ export class AssistantView extends LitElement {
             border-color: var(--success);
         }
 
+        .evidence-panel-status-candidate {
+            color: var(--warning);
+            border-color: var(--warning);
+            border-style: dashed;
+        }
+
         .evidence-panel-action {
             background: none;
             border: 1px solid var(--border);
@@ -751,8 +778,118 @@ export class AssistantView extends LitElement {
         }
 
         .evidence-confirm {
+            position: relative; /* anchors the ::after tooltip of a blocked ✓ */
             border-color: var(--success);
             color: var(--success);
+        }
+
+        .evidence-confirm:disabled {
+            border-color: var(--border);
+            color: var(--text-muted);
+            cursor: not-allowed;
+            background: none;
+        }
+
+        .evidence-confirm[data-tooltip]:hover::after,
+        .evidence-confirm[data-tooltip]:focus-visible::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            z-index: 10;
+            width: max-content;
+            max-width: 260px;
+            white-space: normal;
+            background: var(--tooltip-bg, #1a1f2e);
+            color: var(--tooltip-text, #ffffff);
+            font-size: var(--font-size-xs);
+            line-height: var(--line-height-tight, 1.45);
+            padding: 4px 8px;
+            border-radius: var(--radius-sm);
+            pointer-events: none;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .evidence-confirmation {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: var(--space-xs) var(--space-sm);
+            font-size: var(--font-size-xs);
+            color: var(--text-primary);
+        }
+
+        .evidence-confirmation-prompt {
+            flex: 0 1 auto;
+            min-width: 0;
+            word-break: break-word;
+        }
+
+        .evidence-refusal {
+            font-size: var(--font-size-xs);
+            color: var(--warning);
+        }
+
+        .evidence-records {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            font-size: var(--font-size-xs);
+            color: var(--text-secondary);
+        }
+
+        .evidence-record-cleared {
+            color: var(--text-muted);
+        }
+
+        .evidence-conflict {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-xs);
+            padding: var(--space-xs) var(--space-sm);
+            border: 1px dashed var(--warning);
+            border-radius: var(--radius-sm);
+        }
+
+        .evidence-conflict-title {
+            font-size: var(--font-size-xs);
+            font-weight: var(--font-weight-semibold);
+            color: var(--warning);
+        }
+
+        .evidence-conflict-row.is-kept {
+            border-left-color: var(--accent);
+        }
+
+        .evidence-conflict-row.is-set-aside .evidence-quote {
+            color: var(--text-muted);
+        }
+
+        .evidence-values {
+            font-size: var(--font-size-xs);
+            color: var(--text-primary);
+            word-break: break-word;
+        }
+
+        .evidence-values-label {
+            color: var(--text-muted);
+            margin-right: var(--space-xs);
+        }
+
+        .evidence-actions {
+            margin-top: var(--space-sm);
+            padding-top: var(--space-sm);
+            border-top: 1px dashed var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-xs);
+        }
+
+        .evidence-row-action {
+            border-left-color: var(--accent);
         }
 
         .evidence-retract {
@@ -924,6 +1061,10 @@ export class AssistantView extends LitElement {
         interimText: { type: String, state: true },
         discoveryEvidence: { type: Object, state: true },
         expandedElement: { type: String, state: true },
+        // ✓ is a two-step action: the element key whose 「確認した / まだ」
+        // row is open, and the last refusal ({ key, reason }) from the store.
+        _confirmPending: { state: true },
+        _confirmRefusal: { state: true },
         contextProfile: { type: Object, state: true },
         feedbackNote: { type: String, state: true },
         feedbackStatus: { type: String, state: true },
@@ -940,6 +1081,8 @@ export class AssistantView extends LitElement {
         this.interimText = '';
         this.discoveryEvidence = null;
         this.expandedElement = null;
+        this._confirmPending = null;
+        this._confirmRefusal = null;
         this.contextProfile = {};
         this.feedbackNote = '';
         this.feedbackStatus = '';
@@ -1369,6 +1512,16 @@ export class AssistantView extends LitElement {
         this.updateResponseContent();
     }
 
+    willUpdate(changedProperties) {
+        super.willUpdate?.(changedProperties);
+        // The ✓ confirmation step and its refusal belong to the panel that
+        // was open; switching or closing the panel drops them.
+        if (changedProperties.has('expandedElement')) {
+            this._confirmPending = null;
+            this._confirmRefusal = null;
+        }
+    }
+
     updated(changedProperties) {
         super.updated(changedProperties);
         if (changedProperties.has('responses') || changedProperties.has('currentResponseIndex')) {
@@ -1393,7 +1546,7 @@ export class AssistantView extends LitElement {
             this.expandedElement = null;
         }
 
-        // Detect 5要素 status upgrades (empty→partial, partial→detected, detected→confirmed, etc.)
+        // Detect 5要素 status upgrades (empty→partial, partial→candidate, candidate→detected, detected→confirmed, etc.)
         // and fire a one-shot outline pulse on each affected badge via Web
         // Animations API. Downgrades and no-ops are skipped. Using
         // element.animate() instead of a CSS class lets rapid consecutive
@@ -1404,7 +1557,7 @@ export class AssistantView extends LitElement {
             const curr = this.discoveryEvidence;
             if (prev && curr && curr.elements) {
                 const order = ['pain', 'kpi', 'authority', 'budget', 'timeline'];
-                const rank = { empty: 0, partial: 1, detected: 2, confirmed: 3 };
+                const rank = { empty: 0, partial: 1, candidate: 2, detected: 3, confirmed: 4 };
                 for (const key of order) {
                     const oldStatus = prev.elements?.[key]?.status || 'empty';
                     const newStatus = curr.elements?.[key]?.status || 'empty';
@@ -1444,11 +1597,16 @@ export class AssistantView extends LitElement {
         const order = ['pain', 'kpi', 'authority', 'budget', 'timeline'];
         const ev = this.discoveryEvidence;
         // totalScore = detected + confirmed; confirmedCount = only elements the
-        // user confirmed with the customer. The header shows the two disjoint
-        // groups: candidates still unconfirmed, and confirmed.
+        // user confirmed with the customer; candidateCount = tentative /
+        // conflicting values (never part of the bar). The header shows the
+        // three disjoint groups.
         const confirmed = ev?.confirmedCount ?? 0;
         const candidates = Math.max(0, (ev?.totalScore ?? 0) - confirmed);
-        const counts = t('assistant.progress.counts').replace('{detected}', candidates).replace('{confirmed}', confirmed);
+        const tentative = ev?.candidateCount ?? 0;
+        const counts = t('assistant.progress.counts')
+            .replace('{detected}', candidates)
+            .replace('{candidate}', tentative)
+            .replace('{confirmed}', confirmed);
         const inspector = (typeof window !== 'undefined' && window.evidenceInspector) || null;
         return html`
             <div class="discovery-progress">
@@ -1458,21 +1616,37 @@ export class AssistantView extends LitElement {
                     ${order.map(key => {
                         const el = ev?.elements?.[key];
                         const status = el?.status || 'empty';
-                        // Retracted rows (and the user's retraction marker) are history, not
-                        // the current value — the tooltip shows the newest live quote only.
-                        const live = el?.evidence ? el.evidence.filter(e => !e.retracted) : [];
-                        const lastQuote = live.length ? live[live.length - 1].text : '';
-                        const icon = status === 'confirmed' ? '✓' : status === 'detected' ? '◐' : status === 'partial' ? '●' : '';
+                        // Retracted / superseded rows (and retraction markers) are history,
+                        // not the current value — the tooltip shows the newest live quote only.
+                        const live = el?.evidence ? el.evidence.filter(e => !e.retracted && !e.superseded && e.polarity !== 'retraction') : [];
+                        // A confirmed element quotes the value the user confirmed (not a
+                        // set-aside conflict value that may be newer); otherwise prefer the
+                        // kept value of a conflict, then the newest live row.
+                        const confirmedQuote = status === 'confirmed' && el?.confirmation?.quote ? el.confirmation.quote : '';
+                        const keptRow = live.find(e => e.selection === 'kept');
+                        const newestNotSetAside = [...live].reverse().find(e => e.selection !== 'set_aside');
+                        const lastQuote =
+                            confirmedQuote || keptRow?.text || newestNotSetAside?.text || (live.length ? live[live.length - 1].text : '');
+                        const icon =
+                            status === 'confirmed' ? '✓' : status === 'detected' || status === 'candidate' ? '◐' : status === 'partial' ? '●' : '';
                         const isExpanded = this.expandedElement === key;
+                        const retractedText = status === 'empty' ? this._retractedLabel(inspector, el) : '';
                         const statusText =
-                            status === 'empty' || !inspector
+                            retractedText ||
+                            (status === 'empty' || !inspector
                                 ? t('assistant.evidence.unconfirmed')
-                                : inspector.getElementMeta(key).statusLabel(status);
-                        const tooltip =
+                                : inspector.getElementMeta(key).statusLabel(status));
+                        const tagText = status === 'candidate' ? this._candidateTagText(inspector, el) : '';
+                        const hint =
                             status === 'detected'
-                                ? `${lastQuote || `${labels[key]}: ${statusText}`} — ${t('assistant.badge.detected_hint')}`
-                                : lastQuote || `${labels[key]}: ${statusText}`;
-                        const ariaLabel = lastQuote ? `${labels[key]}: ${statusText}: ${lastQuote}` : `${labels[key]}: ${statusText}`;
+                                ? t('assistant.badge.detected_hint')
+                                : status === 'candidate'
+                                  ? t('assistant.badge.candidate_hint')
+                                  : '';
+                        const base = lastQuote || `${labels[key]}: ${statusText}`;
+                        const tooltip = hint ? `${tagText ? `[${tagText}] ` : ''}${base} — ${hint}` : base;
+                        const statusForAria = tagText ? `${statusText} (${tagText})` : statusText;
+                        const ariaLabel = lastQuote ? `${labels[key]}: ${statusForAria}: ${lastQuote}` : `${labels[key]}: ${statusForAria}`;
                         return html`
                             <button
                                 type="button"
@@ -1490,6 +1664,7 @@ export class AssistantView extends LitElement {
                                         : ''
                                 }
                                 ${icon ? html`<span class="dp-badge-icon">${icon}</span>` : ''}
+                                ${tagText ? html`<span class="dp-badge-tag">${tagText}</span>` : ''}
                             </button>
                         `;
                     })}
@@ -1498,13 +1673,41 @@ export class AssistantView extends LitElement {
         `;
     }
 
+    // 「撤回済み（履歴 N 件）」 for an element whose live rows were all
+    // withdrawn; '' otherwise.
+    _retractedLabel(inspector, el) {
+        const n = inspector?.getRetractedCount ? inspector.getRetractedCount(el) : null;
+        return n == null ? '' : t('assistant.evidence.retracted_label').replace('{n}', n);
+    }
+
+    // Sticky tag text of a candidate (仮 / 希望 / 要確認（N 件）/ …); '' when none.
+    _candidateTagText(inspector, el) {
+        const tag = inspector?.getCandidateTag ? inspector.getCandidateTag(el) : null;
+        if (!tag) return '';
+        return t(tag.i18nKey).replace('{n}', tag.n ?? '');
+    }
+
+    // The value the ✓ confirmation step asks about — the row the store
+    // would record, formatted (KPI with its current value alongside).
+    _confirmPromptValue(inspector, key, el) {
+        const row = inspector.getConfirmRow(el);
+        if (!row) return '';
+        let values = row.values;
+        if (key === 'kpi' && values) {
+            const kpi = inspector.collectKpiValues(el);
+            values = { ...values, current: kpi ? kpi.current : undefined };
+        }
+        return inspector.formatValues(key, values) || row.text || '';
+    }
+
     _renderEvidencePanel() {
         if (this.selectedProfile !== 'discovery' && this.selectedProfile !== 'sales') return '';
         if (!this.expandedElement) return '';
 
         const inspector = (typeof window !== 'undefined' && window.evidenceInspector) || null;
         if (!inspector) return '';
-        const { getElementMeta, formatRelativeTime, getSourceMeta } = inspector;
+        const { getElementMeta, formatRelativeTime, getSourceMeta, getConfirmRefusalKey, getConfirmBlockReason, collectKpiValues, formatValues } =
+            inspector;
 
         const key = this.expandedElement;
         const meta = getElementMeta(key);
@@ -1514,16 +1717,41 @@ export class AssistantView extends LitElement {
         const status = el?.status || 'empty';
         const evidenceList = el?.evidence ? [...el.evidence].reverse() : [];
         const selfMentionsList = el?.selfMentions ? [...el.selfMentions].reverse() : [];
+        const actionsList = el?.actions ? [...el.actions].reverse() : [];
+        const history = Array.isArray(el?.confirmationHistory) ? [...el.confirmationHistory].reverse().slice(0, 3) : [];
+        const conflict = el?.conflict || null;
         const now = Date.now();
+
+        const statusText = (status === 'empty' && this._retractedLabel(inspector, el)) || meta.statusLabel(status);
+        const tagText = status === 'candidate' ? this._candidateTagText(inspector, el) : '';
+        // ✓ is offered on detected / candidate. An unresolved conflict (no value
+        // kept, or the basis is unknown) disables it with the reason as tooltip.
+        const canConfirm = status === 'detected' || status === 'candidate';
+        const blockReason = canConfirm && el ? getConfirmBlockReason(el) : null;
+        const blockText = blockReason ? t(getConfirmRefusalKey(blockReason)) : '';
+        const pending = this._confirmPending === key && canConfirm && !blockReason;
+        const refusal = this._confirmRefusal && this._confirmRefusal.key === key ? this._confirmRefusal.reason : null;
+        const kpiValues = key === 'kpi' && el ? collectKpiValues(el) : null;
+        const kpiText = kpiValues ? formatValues('kpi', kpiValues) : '';
+        const rowById = id => (el?.evidence || []).find(e => e.id === id) || null;
 
         return html`
             <div class="evidence-panel" role="region" aria-label="${meta.label} evidence">
                 <div class="evidence-panel-head">
                     <span class="evidence-panel-title">${meta.label}</span>
-                    <span class="evidence-panel-status evidence-panel-status-${status}">${meta.statusLabel(status)}</span>
+                    <span class="evidence-panel-status evidence-panel-status-${status}">${statusText}</span>
+                    ${tagText ? html`<span class="dp-badge-tag">${tagText}</span>` : ''}
                     ${
-                        status === 'detected' || status === 'partial'
-                            ? html`<button type="button" class="evidence-panel-action evidence-confirm" @click=${() => this._confirmEvidence(key)}>
+                        canConfirm
+                            ? html`<button
+                                  type="button"
+                                  class="evidence-panel-action evidence-confirm"
+                                  ?disabled=${!!blockReason}
+                                  data-tooltip=${blockText || ''}
+                                  title=${blockText || ''}
+                                  aria-expanded=${pending ? 'true' : 'false'}
+                                  @click=${() => this._startConfirm(key)}
+                              >
                                   ✓ ${t('assistant.evidence.confirm')}
                               </button>`
                             : ''
@@ -1546,6 +1774,103 @@ export class AssistantView extends LitElement {
                     </button>
                 </div>
                 ${
+                    pending
+                        ? html`
+                              <div class="evidence-confirmation" role="group">
+                                  <span class="evidence-confirmation-prompt"
+                                      >${t('assistant.evidence.confirm_prompt').replace('{value}', this._confirmPromptValue(inspector, key, el))}</span
+                                  >
+                                  <button type="button" class="evidence-panel-action evidence-confirm" @click=${() => this._confirmEvidence(key)}>
+                                      ${t('assistant.evidence.confirm_yes')}
+                                  </button>
+                                  <button type="button" class="evidence-panel-action" @click=${() => (this._confirmPending = null)}>
+                                      ${t('assistant.evidence.confirm_no')}
+                                  </button>
+                              </div>
+                          `
+                        : ''
+                }
+                ${refusal ? html`<div class="evidence-refusal" role="status">${t(getConfirmRefusalKey(refusal))}</div>` : ''}
+                ${
+                    history.length > 0
+                        ? html`
+                              <ul class="evidence-records">
+                                  ${history.map(h => {
+                                      const time = formatRelativeTime(h.at, now);
+                                      if (h.kind === 'confirmed') {
+                                          return html`<li class="evidence-record-confirmed">
+                                              ${t('assistant.evidence.confirmation_record')
+                                                  .replace('{value}', h.value ?? '')
+                                                  .replace('{time}', time)}
+                                          </li>`;
+                                      }
+                                      const reasonText = ['retraction', 'conflict', 'manual'].includes(h.reason)
+                                          ? t('assistant.evidence.cleared.' + h.reason)
+                                          : String(h.reason || '');
+                                      return html`<li class="evidence-record-cleared">
+                                          ${t('assistant.evidence.cleared_record').replace('{reason}', reasonText).replace('{time}', time)}
+                                      </li>`;
+                                  })}
+                              </ul>
+                          `
+                        : ''
+                }
+                ${
+                    conflict
+                        ? html`
+                              <div class="evidence-conflict">
+                                  <div class="evidence-conflict-title">
+                                      ${conflict.basis === 'unknown' ? t('assistant.evidence.conflict_unknown_title') : t('assistant.evidence.conflict_title')}
+                                  </div>
+                                  <ul class="evidence-list">
+                                      ${(conflict.values || []).map(v => {
+                                          const row = rowById(v.rowId);
+                                          const kept = conflict.keptRowId != null && conflict.keptRowId === v.rowId;
+                                          const setAside = conflict.keptRowId != null && !kept;
+                                          return html`
+                                              <li
+                                                  class="evidence-row evidence-conflict-row ${kept ? 'is-kept' : ''} ${setAside ? 'is-set-aside' : ''}"
+                                                  title=${row ? row.text : ''}
+                                              >
+                                                  <div class="evidence-quote">${v.raw}</div>
+                                                  <div class="evidence-meta">
+                                                      ${kept ? html`<span class="evidence-tag evidence-tag-kept">${t('assistant.evidence.tag.kept')}</span>` : ''}
+                                                      ${
+                                                          setAside
+                                                              ? html`<span class="evidence-tag evidence-tag-set-aside"
+                                                                    >${t('assistant.evidence.tag.set_aside')}</span
+                                                                >`
+                                                              : ''
+                                                      }
+                                                      <span class="evidence-time">${row ? formatRelativeTime(row.timestamp, now) : ''}</span>
+                                                      ${
+                                                          kept || status === 'confirmed'
+                                                              ? ''
+                                                              : html`<button
+                                                                    type="button"
+                                                                    class="evidence-panel-action evidence-select"
+                                                                    @click=${() => this._selectEvidence(key, v.rowId)}
+                                                                >
+                                                                    ${t('assistant.evidence.select')}
+                                                                </button>`
+                                                      }
+                                                  </div>
+                                              </li>
+                                          `;
+                                      })}
+                                  </ul>
+                              </div>
+                          `
+                        : ''
+                }
+                ${
+                    kpiText
+                        ? html`<div class="evidence-values">
+                              <span class="evidence-values-label">${t('assistant.evidence.values_label')}</span>${kpiText}
+                          </div>`
+                        : ''
+                }
+                ${
                     evidenceList.length === 0
                         ? html`<div class="evidence-empty">${t('assistant.evidence.empty')}</div>`
                         : html`
@@ -1555,8 +1880,15 @@ export class AssistantView extends LitElement {
                                       // A manual retraction is logged as a user-sourced marker row
                                       // (text '[manual]'); show it as an action, not as a quote.
                                       const isUserMarker = e.source === 'user';
+                                      const isHistory = e.retracted || e.superseded;
+                                      const qualifierKey =
+                                          !isHistory && (e.qualifier === 'tentative' || e.qualifier === 'current') ? e.qualifier : null;
+                                      const retractedReason =
+                                          e.retracted && !isUserMarker && inspector.getRetractedReasonLabel
+                                              ? inspector.getRetractedReasonLabel(e)
+                                              : null;
                                       return html`
-                                          <li class="evidence-row ${e.retracted ? 'evidence-row-retracted' : ''}">
+                                          <li class="evidence-row ${isHistory ? 'evidence-row-retracted' : ''}">
                                               ${isUserMarker ? '' : html`<div class="evidence-quote">${e.text}</div>`}
                                               <div class="evidence-meta">
                                                   <span class="evidence-source">${sourceMeta.icon} ${sourceMeta.label}</span>
@@ -1568,10 +1900,22 @@ export class AssistantView extends LitElement {
                                                           : ''
                                                   }
                                                   ${
+                                                      qualifierKey
+                                                          ? html`<span class="evidence-tag evidence-tag-qualifier"
+                                                                >${t('assistant.evidence.tag.' + qualifierKey)}</span
+                                                            >`
+                                                          : ''
+                                                  }
+                                                  ${
                                                       e.retracted && !isUserMarker
                                                           ? html`<span class="evidence-tag evidence-tag-retracted"
                                                                 >${t('assistant.evidence.retracted')}</span
                                                             >`
+                                                          : ''
+                                                  }
+                                                  ${
+                                                      retractedReason
+                                                          ? html`<span class="evidence-tag evidence-tag-retracted">${retractedReason}</span>`
                                                           : ''
                                                   }
                                                   <span class="evidence-time">${formatRelativeTime(e.timestamp, now)}</span>
@@ -1581,6 +1925,27 @@ export class AssistantView extends LitElement {
                                   })}
                               </ul>
                           `
+                }
+                ${
+                    actionsList.length > 0
+                        ? html`
+                              <div class="evidence-actions">
+                                  <div class="evidence-self-section-title">${t('assistant.evidence.actions_section')}</div>
+                                  <ul class="evidence-list">
+                                      ${actionsList.map(
+                                          a => html`
+                                              <li class="evidence-row evidence-row-action">
+                                                  <div class="evidence-quote">${a.text}</div>
+                                                  <div class="evidence-meta">
+                                                      <span class="evidence-time">${formatRelativeTime(a.timestamp, now)}</span>
+                                                  </div>
+                                              </li>
+                                          `
+                                      )}
+                                  </ul>
+                              </div>
+                          `
+                        : ''
                 }
                 ${
                     selfMentionsList.length > 0
@@ -1626,11 +1991,40 @@ export class AssistantView extends LitElement {
     // Manual evidence actions. The main process applies them to the store and
     // pushes the new state back on 'discovery-evidence-update', so the view
     // does not mutate discoveryEvidence locally.
+    //
+    // ✓ is two steps: the head button opens the 「「値」を相手に確認しましたか？」
+    // row; 「確認した」 then asks the store, which may still refuse (the
+    // reason is shown, the state is unchanged).
+    _startConfirm(key) {
+        this._confirmRefusal = null;
+        this._confirmPending = this._confirmPending === key ? null : key;
+    }
+
     async _confirmEvidence(key) {
         try {
-            await window.whisperOhKami?.confirmEvidence?.(key);
+            const result = await window.whisperOhKami?.confirmEvidence?.(key);
+            this._confirmRefusal = result && result.success === false ? { key, reason: result.reason || 'no_candidate' } : null;
         } catch (error) {
             console.error('Failed to confirm discovery evidence:', error);
+        } finally {
+            this._confirmPending = null;
+        }
+    }
+
+    // 「この値を候補として残す」: keeps one value of a conflict as the
+    // candidate. It does not resolve the conflict and is not a ✓.
+    async _selectEvidence(key, rowId) {
+        const conflict = this.discoveryEvidence?.elements?.[key]?.conflict;
+        if (conflict && conflict.keptRowId === rowId) return;
+        try {
+            const result = await window.whisperOhKami?.selectEvidence?.(key, rowId);
+            if (result && result.success === false) {
+                console.warn('Discovery evidence selection refused:', result.reason);
+                return;
+            }
+            if (this._confirmRefusal && this._confirmRefusal.key === key) this._confirmRefusal = null;
+        } catch (error) {
+            console.error('Failed to select discovery evidence:', error);
         }
     }
 

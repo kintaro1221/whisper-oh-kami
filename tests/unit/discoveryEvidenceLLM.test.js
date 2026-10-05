@@ -470,3 +470,12 @@ describe('final-review fixes: prompt contract + same-session freshness (v0.7.5)'
         }
     });
 });
+
+describe('buildPrompt — v0.7.8 qualifiers', () => {
+    test('buildPrompt tells the model that tentative / wished / conflicting values are partial with the condition sentence quoted', () => {
+        const p = buildPrompt('x');
+        expect(p).toMatch(/仮|未承認|希望|競合/);
+        // The brief's regex above already matches the pre-existing 「仮定」; pin the new line itself.
+        expect(p).toContain('仮・未承認・申請中の額、希望・未合意の時期、同じ項目で食い違う値（競合）は filled にせず partial にし');
+    });
+});

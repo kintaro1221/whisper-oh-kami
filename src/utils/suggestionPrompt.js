@@ -11,6 +11,11 @@
 
 'use strict';
 
+// discoveryEvidence.js is itself a pure CommonJS module (no Electron / IPC),
+// so pulling the live-row predicate from it keeps "which row is the current
+// value" defined in exactly one place.
+const { isLiveRow } = require('./discoveryEvidence');
+
 // Explicit whitelist resolver for which profiles get the 5-element evidence
 // inject. Returns the canonical profile name when it matches the
 // discovery/sales family, otherwise null (= no inject).
@@ -32,12 +37,17 @@ function resolveSuggestionProfile(profile) {
 // with its BANT equivalent so the prompt connects directly to the policy
 // rules baked into the system prompt (prompts.js #会話の優先順位).
 //
-// Status comes verbatim from discoveryEvidenceStore.getState():
+// Status comes from discoveryEvidenceStore.getState() (5 tiers:
+// empty < partial < candidate < detected < confirmed):
 //   - 'empty'     → label only
 //   - 'partial'   → label + most recent quote (truncated to 40 chars)
-//   - 'detected'  → label + most recent quote (auto-detected candidate,
-//                   not yet confirmed with the customer)
-//   - 'confirmed' → label + most recent quote (the user confirmed it)
+//   - 'candidate' → 'candidate（仮・未合意・要確認）' + most recent quote
+//                   (tentative / not agreed / conflicting value — the model
+//                   must not state it as settled)
+//   - 'detected'  → label + most recent quote (affirmative evidence in the
+//                   conversation, not yet confirmed with the customer; this
+//                   is what external validation calls "confirmed")
+//   - 'confirmed' → label + most recent quote (only the user's manual ✓)
 //
 // The trailing instruction is intentionally minimal — eventKind-specific
 // output shaping ("返答候補" vs "次に聞くとよいこと", forbidden sections on
@@ -63,6 +73,11 @@ const EVIDENCE_LABELS = {
 };
 const EVIDENCE_ORDER = ['pain', 'kpi', 'authority', 'budget', 'timeline'];
 const EVIDENCE_QUOTE_MAX = 40;
+// Statuses that need a qualifier in the prompt. Everything else is printed
+// verbatim (empty / partial / detected / confirmed).
+const EVIDENCE_STATUS_LABELS = {
+    candidate: 'candidate（仮・未合意・要確認）',
+};
 
 function buildEvidenceBlock(evidenceState) {
     if (!evidenceState || !evidenceState.elements) return '';
@@ -71,18 +86,19 @@ function buildEvidenceBlock(evidenceState) {
         const status = (el && el.status) || 'empty';
         const [jp, bant] = EVIDENCE_LABELS[key];
         if (status === 'empty') return `- ${jp} (${bant}): empty`;
-        // Retracted rows (incl. the user's manual retraction marker) are history,
-        // not the current value — quote only the newest live row.
-        const evList = ((el && el.evidence) || []).filter(e => !e.retracted);
+        // Retracted / superseded rows and the retraction marker row are history,
+        // not the current value — quote only the newest live row (isLiveRow).
+        const evList = ((el && el.evidence) || []).filter(isLiveRow);
         const lastQuote = evList.length > 0 ? evList[evList.length - 1].text : '';
         const snippet = lastQuote ? ` ・ 直近: "${lastQuote.slice(0, EVIDENCE_QUOTE_MAX)}"` : '';
-        return `- ${jp} (${bant}): ${status}${snippet}`;
+        return `- ${jp} (${bant}): ${EVIDENCE_STATUS_LABELS[status] || status}${snippet}`;
     });
     return (
         `# ヒアリング進捗 (5要素 / BANT 実測、背景チェック指標)\n` +
         lines.join('\n') +
         `\n→ 5要素 / BANT は会話品質を測る背景チェック。通常は会話の流れを最優先し、` +
         `confirmed 要素の重複質問だけ避ける。detected は候補であり未確認なので、自然な流れで一言確認する質問を混ぜてよい。` +
+        `candidate は仮・未合意・競合なので、確認質問の優先度を上げる（値を断定して話さない）。` +
         `自分が解決策提示済 / 相手が BANT 関連表現 (予算・決裁・期限等) に触れた / 次アクションへ進む段階でだけ、` +
         `未確認要素を「次に聞くとよいこと」に自然に補う。\n\n`
     );

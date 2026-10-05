@@ -1443,7 +1443,13 @@ const whisperOhKami = {
 
     // Discovery evidence manual actions (v0.7.5): only the user can promote an
     // element to "confirmed"; retract clears the element back to empty.
+    // v0.7.8: confirmEvidence / selectEvidence resolve to { success, reason }
+    // (reason null on success; otherwise confirm: 'already_confirmed' |
+    // 'no_candidate' | 'conflict_unresolved' | 'basis_unknown', select:
+    // 'no_conflict' | 'row_not_live' | 'unknown_row'). selectEvidence keeps one
+    // value of a conflict; it does not confirm the element (✓ is separate).
     confirmEvidence: key => ipcRenderer.invoke('discovery-evidence-confirm', key),
+    selectEvidence: (key, rowId) => ipcRenderer.invoke('discovery-evidence-select', key, rowId),
     retractEvidence: key => ipcRenderer.invoke('discovery-evidence-retract', key),
 
     // Platform detection
@@ -1477,6 +1483,11 @@ window.devListScenarios = () => ipcRenderer.invoke('dev:list-scenarios');
 window.devDumpTurnEvents = () => ipcRenderer.invoke('dev:dump-turn-events');
 window.devDumpDeepgramStatus = () => ipcRenderer.invoke('dev:dump-deepgram-status');
 window.devDumpDiscoveryEvidence = () => ipcRenderer.invoke('dev:dump-discovery-evidence');
+// Push one transcribed turn without audio (real-machine UI check). Main only
+// accepts it when the app was launched with WOK_DEV=1; otherwise it resolves
+// to { success: false, reason: 'dev_disabled' }.
+//   await devPushTurn({ speaker: 'opponent', text: '予算は年間100万円です' })
+window.devPushTurn = ({ speaker, text } = {}) => ipcRenderer.invoke('dev:push-turn', { speaker, text });
 // Phase 1g-3.7 — control + observe the audio-capture child process (native
 // WASAPI helper or ffmpeg+SCR fallback). See src/utils/audioCapture.js for
 // backend selection and env-var configuration.
