@@ -1,15 +1,15 @@
 # WhisperOhKAMI データフロー マトリクス
 
-最終更新日: 2026-09-08
+最終更新日: 2026-10-12
 参照対象: WhisperOhKAMI v1（先行販売向け）および本サービスのランディングページ・販売バックエンド
 
 本書は、本ソフトおよび本サービスを構成する各実行モード・各処理経路で、**どのデータが・どこへ・いつ・誰の責任で移動するか** を、現行リポジトリのコード位置とともに整理した「事実テーブル」です。プライバシーポリシー（`docs/legal/privacy-policy.md`）および利用規約（`docs/legal/terms-and-sales.md`）は本書を truth anchor として参照します。
 
 > **現在の提供形態について**: WhisperOhKAMI は現在、GitHub Release で無料公開しています。本文のうち決済・注文・有償ダウンロード（Stripe、アクセス URL、注文記録など）に関する記述は、有償提供を行っていない間は適用されません。
 
-> 用語: 「端末内」とは、お客様が本ソフトを実行している Windows PC のローカルファイルシステム・RAM・ローカルプロセス間通信を指します。「端末外に送信される」とは、HTTPS / WebSocket を介して当該 PC 以外のサーバへ送信されることを指します。
+> 用語: 「端末内」とは、お客様が本ソフトを実行している Windows PC のローカルファイルシステム・RAM・ローカルプロセス間通信を指します。「端末外に送信される」とは、HTTP / HTTPS / WebSocket を介して当該 PC 以外のサーバへ送信されることを指します。
 >
-> **重要な留保**: 「端末外に出ない」という記述は、当該モードを当該設定で利用した場合のみ成立します。BYOK 経路を有効にした時点で、その経路が扱うデータは外部サービスへ送信されます（お客様の選択に基づきます）。
+> **重要な留保**: 「端末外に出ない」という記述は、当該モードを当該設定で利用した場合のみ成立します。BYOK の会話機能を利用する場合や、別PC／リモートサーバのOllama Hostへ推論を要求する場合、その経路が扱うデータは端末外へ送信されます。このPCのOllamaであっても、Ollama側のクラウド連携・転送設定は別途確認が必要です。
 
 ---
 
@@ -17,22 +17,22 @@
 
 本ソフトの動作モードは `providerMode`（`trial` | `byok` | `local`）と `sttMode`（`local` | `cloud`）の組み合わせで決まります。両者は `preferences.json` に保存されます（`src/storage.js`）。BYOK 経路は **お客様自身の API キーを設定した場合のみ** 有効になります。
 
-下表の「端末外送信」「当方の受領」は入力欄の会話データについて示しています。全モード共通の起動時更新確認と通信情報は §1.3 を参照してください。「なし」はアプリ全体の通信がないことを意味しません。
+下表の「端末外送信」「当方の受領」は入力欄の会話データについて示しています。全モード共通の起動時更新確認と通信情報は §1.3 を参照してください。「なし」はアプリ全体の通信がないことを意味しません。`local-whisper` は音声認識の処理を表し、BYOKでのGemini送信やローカルAIでのOllama Hostへの送信を停止する設定ではありません。
 
-| モード ID                                                       | 入力データ                                         | 局所処理                                                          | 端末外送信                                                                                                                                                                | 送信先                    | 当方の受領                       | コード証跡                                                                                                                                                                                                                   |
-| --------------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `trial`（既定起動時）                                           | マイク音声（話者は区別しない）、画面（任意で取得） | Whisper ローカル推論で文字起こし → 5要素 regex 判定               | **なし**（既定 Small / 低スペック向け Tiny はインストーラに同梱済みのため通信なし。任意の高精度モデル kotoba-whisper-v2.2 を選んだ場合の初回ダウンロードのみ例外 / 後述） | —                         | なし                             | `src/storage.js` (`DEFAULT_PREFERENCES.providerMode='trial'`)、`src/utils/localai.js` (`loadWhisperPipeline`, `handleSpeechEnd`)、`src/utils/discoveryEvidence.js`                                                           |
-| `byok-gemini`（`providerMode='byok'`, Gemini API キー設定済み） | マイク音声、画面（任意）、文字起こし transcript    | regex 5要素判定（端末内）                                         | 音声・transcript・画面（取得時）が Gemini Live / generateContent へ送信                                                                                                   | Google Gemini API（米国） | なし（お客様のキーで直送）       | `src/utils/gemini.js` (`GoogleGenAI`, `sendToGroq` ではなく Gemini Live セッション化)、`src/utils/discoveryEvidenceLLM.js`、`src/utils/keyVerify.js` (`https://generativelanguage.googleapis.com/v1beta/models`)             |
-| `byok-deepgram`（`sttMode='cloud'`, Deepgram API キー設定済み） | マイク音声、商談相手の音声（WASAPI loopback）      | 24kHz→16kHz リサンプリング                                        | 16kHz PCM が Deepgram WebSocket へ送信                                                                                                                                    | Deepgram（米国）          | なし（お客様のキーで直送）       | `src/utils/deepgram.js` (`wss://api.deepgram.com/v1/listen` URL 定数、`send()`)、`src/utils/audioCapture.js`（WASAPI loopback ネイティブヘルパ）、`src/utils/keyVerify.js` (`https://api.deepgram.com/v1/projects` キー検証) |
-| `local-ollama`（`providerMode='local'`）                        | マイク音声 → 文字起こし transcript                 | Whisper ローカル推論、Ollama ローカル推論                         | **なし**（既定 `127.0.0.1:11434` 通信は端末内）。Ollama モデル初回 `pull` 時を除く（後述）                                                                                | —                         | なし                             | `src/storage.js` (`DEFAULT_PREFERENCES.ollamaHost='http://127.0.0.1:11434'`)、`src/utils/localai.js` (`initializeLocalSession`, `Ollama` クライアント)                                                                       |
-| `local-whisper`（既定 STT）                                     | マイク音声、商談相手の音声                         | `@huggingface/transformers` の Whisper パイプライン（端末内推論） | **なし**（既定 Small / 低スペック向け Tiny はインストーラに同梱済みのため通信なし。任意の高精度モデル kotoba-whisper-v2.2 を選んだ場合の初回ダウンロードのみ例外 / 後述） | —                         | なし                             | `src/utils/localai.js` (`loadWhisperPipeline`, `transcribeAudio`, `env.cacheDir`)                                                                                                                                            |
-| Groq クラウド LLM（隠しレーン）                                 | transcript                                         | —                                                                 | transcript が Groq Chat Completions へ送信                                                                                                                                | Groq（米国）              | なし（お客様の Groq キーで直送） | `src/utils/gemini.js` (`sendToGroq`, `https://api.groq.com/openai/v1/chat/completions`)。UI からは未公開の開発者向けレーン（`trialModeContract.test.js` で契約化）。                                                         |
+| モード ID                                                                              | 入力データ                                                                           | 局所処理                                                          | 端末外送信                                                                                                                                                            | 送信先                    | 当方の受領                       | コード証跡                                                                                                                                                                                                                   |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `trial`（既定起動時）                                                                  | マイク音声（話者は区別しない）、画面（任意で取得）                                   | Whisper ローカル推論で文字起こし → 5要素 regex 判定               | **なし**（既定 Small / 低スペック向け Tiny はインストーラに同梱済みのため通信なし。任意の高精度モデル kotoba-whisper-v2.2 の必要なファイルを取得する際は通信 / 後述） | —                         | なし                             | `src/storage.js` (`DEFAULT_PREFERENCES.providerMode='trial'`)、`src/utils/localai.js` (`loadWhisperPipeline`, `handleSpeechEnd`)、`src/utils/discoveryEvidence.js`                                                           |
+| `byok-gemini`（`providerMode='byok'`, Gemini API キー設定済み）                        | マイク音声、画面（任意）、文字起こし transcript                                      | regex 5要素判定（端末内）                                         | 音声・transcript・画面（取得時）が Gemini Live / generateContent へ送信                                                                                               | Google Gemini API（米国） | なし（お客様のキーで直送）       | `src/utils/gemini.js` (`GoogleGenAI`, `sendToGroq` ではなく Gemini Live セッション化)、`src/utils/discoveryEvidenceLLM.js`、`src/utils/keyVerify.js` (`https://generativelanguage.googleapis.com/v1beta/models`)             |
+| `byok-deepgram`（`providerMode='byok'`, `sttMode='cloud'`, Deepgram API キー設定済み） | マイク音声、商談相手の音声（WASAPI loopback）                                        | 24kHz→16kHz リサンプリング                                        | 16kHz PCM が Deepgram WebSocket へ送信                                                                                                                                | Deepgram（米国）          | なし（お客様のキーで直送）       | `src/utils/deepgram.js` (`wss://api.deepgram.com/v1/listen` URL 定数、`send()`)、`src/utils/audioCapture.js`（WASAPI loopback ネイティブヘルパ）、`src/utils/keyVerify.js` (`https://api.deepgram.com/v1/projects` キー検証) |
+| `local-ollama`（`providerMode='local'`）                                               | 音声から得たtranscript、入力文、履歴、システムプロンプト／補足情報、画面解析時の画像 | Whisperは端末内。LLMは指定したOllama Host                         | Hostが別PC／リモートサーバなら左記のテキスト・画像を端末外へ送信。既定 `127.0.0.1:11434` はこのPCへの通信。Ollama側のクラウド連携・転送設定は本アプリで制御しない     | 設定したOllama Host       | なし（指定Hostへ直送）           | `src/utils/localai.js` (`initializeLocalSession`, `sendToOllama`, `sendLocalText`, `sendLocalImage`)、`src/components/views/MainView.js` (`Ollama Host`)                                                                     |
+| `local-whisper`（既定 STT）                                                            | マイク音声、商談相手の音声                                                           | `@huggingface/transformers` の Whisper パイプライン（端末内推論） | **なし**（既定 Small / 低スペック向け Tiny はインストーラに同梱済みのため通信なし。任意の高精度モデル kotoba-whisper-v2.2 の必要なファイルを取得する際は通信 / 後述） | —                         | なし                             | `src/utils/localai.js` (`loadWhisperPipeline`, `transcribeAudio`, `env.cacheDir`)                                                                                                                                            |
+| Groq クラウド LLM（隠しレーン）                                                        | transcript                                                                           | —                                                                 | transcript が Groq Chat Completions へ送信                                                                                                                            | Groq（米国）              | なし（お客様の Groq キーで直送） | `src/utils/gemini.js` (`sendToGroq`, `https://api.groq.com/openai/v1/chat/completions`)。UI からは未公開の開発者向けレーン（`trialModeContract.test.js` で契約化）。                                                         |
 
 ### 1.1 モデル初回ダウンロード（trial / local-whisper / local-ollama 共通）
 
 - **Whisper モデル（既定 Small / 低スペック向け Tiny）**: インストーラに同梱済み（`resources/whisper-models/Xenova/whisper-{tiny,small}/`）のため、Hugging Face Hub への通信は発生しません。
-- **Whisper モデル（任意の高精度モデル）**: `onnx-community/kotoba-whisper-v2.2-ONNX` を設定で選択した場合のみ、`@huggingface/transformers` 経由で Hugging Face Hub（`huggingface.co`）から取得します。`src/utils/localai.js` の `pipeline('automatic-speech-recognition', modelName, …)` 呼び出し時。キャッシュ先は `app.getPath('userData')/whisper-models` で、以後の起動では再ダウンロードは発生しません。
-- **Ollama モデル**: お客様が手動で `ollama pull <model>` を実行された場合のみ、Ollama サーバ（既定では端末内 `127.0.0.1:11434`）からのモデル取得が発生します。本ソフトは Ollama 既存セッションを利用するのみで、本ソフト側から `pull` をトリガしません。
+- **Whisper モデル（任意の高精度モデル）**: `onnx-community/kotoba-whisper-v2.2-ONNX` を設定で選択し、キャッシュがない場合等に `@huggingface/transformers` 経由でHugging Face Hubとその配信先から取得します。`src/utils/localai.js` の `pipeline('automatic-speech-recognition', modelName, …)` 呼び出し時。キャッシュ先は `app.getPath('userData')/whisper-models` です。キャッシュを再利用できますが、削除・欠損したファイル等は再取得が必要です。
+- **Ollamaモデル**: 使用するHost上にモデルをあらかじめ用意してください。本アプリは `pull` を呼びません。`ollama pull <model>` 等の取得操作はOllama側の機能です。これとは別に、本アプリは開始時に指定Hostへ `list`、推論時に `chat` を呼び、テキストや画像を送ります。
 
 ### 1.2 端末内に永続化される情報
 
@@ -114,10 +114,12 @@ Cloudflare D1 の `orders` テーブルには、**お客様の氏名・住所・
 
 1. `providerMode` が `trial` または `local` であること（`byok` ではない）
 2. `sttMode` が `local` であること（`cloud` = Deepgram 経由ではない）
-3. 任意の高精度 Whisper モデル（kotoba-whisper-v2.2）を使う場合はその初回ダウンロードが、Ollama モデルを使う場合はその初回ダウンロードが、それぞれ完了していること（以後の起動ではモデル取得の通信は発生しない。既定 Small / Tiny は同梱済みのためこの条件の対象外）（モデル取得後も起動時の更新確認は発生する）
+3. `local` ではOllama HostがこのPCを指し、Ollama側でも会話をクラウドサービス等へ転送しない構成であること（既定Hostは `http://127.0.0.1:11434`。本アプリはOllama側の転送を制御しない）
 4. 開発者向け Groq レーンが有効化されていないこと（UI からは未公開。`getGroqApiKey()` がキーを返さない）
 
-上記いずれかが満たされない場合、該当する経路で端末外への送信が発生します。各経路の送信先は本書 §1 の表を参照してください。
+上記の条件を確認できない場合、「会話データが端末外に出ない」とは説明できません。実際の送信は、選んだ経路とその利用状況によって決まります。各経路の送信先は本書 §1 の表を参照してください。
+
+会話データの送信と、モデル取得・更新確認の通信は別です。任意のWhisperモデルはキャッシュのないファイル等を取得する際に通信します。Ollamaモデルの取得はOllama側で行い、本アプリは `pull` を呼びません。モデル取得後も起動時の更新確認は発生するため、上記の条件だけでアプリ全体が無通信になるわけではありません。
 
 ---
 

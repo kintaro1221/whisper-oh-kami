@@ -264,7 +264,7 @@ describe('v0.7.5 final review: copy accuracy (5-element bar, Ollama host, brandi
     test('legal docs: local-ollama mentions the remote-host caveat', () => {
         const policy = read('docs/legal/privacy-policy.md');
         const section = policy.slice(policy.indexOf('### 2.2 local-ollama'), policy.indexOf('### 2.3'));
-        expect(section).toMatch(/127\.0\.0\.1 以外[\s\S]*送信/);
+        expect(section).toMatch(/(?:別PC|別の PC|この PC 以外)[\s\S]*送信/);
         const guidance = read('docs/legal/recording-guidance.md');
         const row = guidance.split('\n').find(l => l.startsWith('| local-whisper / local-ollama'));
         expect(row).toMatch(/Ollama のホストをこの PC 以外/);

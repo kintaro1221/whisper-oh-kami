@@ -1,10 +1,10 @@
 # WhisperOhKAMI ソースからのビルド手順
 
-最終更新日: 2026-07-07
+最終更新日: 2026-10-12
 対象バージョン: 配布バンドルの `manifest.json.version` に記載のバージョン
 対象 OS: Windows 11 x64（macOS / Linux も技術的にはビルド可能ですが、配布のスコープ外です）
 
-このファイルは GitHub Release のタグ（対応ソース）と、有償配布バンドル（`out/paid-release/<version>/build-instructions.md`）の両方に適用されます。本ソフトは GPL-3.0 でライセンスされており、本ファイルは GPL §6 で要求される「対応ソース（Corresponding Source）に容易にアクセスするための指示」の一部です。
+このファイルはGitHub Releaseの製品ソースと、候補バンドル（`out/paid-release/<version>/build-instructions.md`）に適用されます。本ソフトの適用ライセンスはリポジトリの `LICENSE`（GNU GPL version 3）です。以下は取得・ビルド方法と収録範囲の説明であり、第三者依存を含む法的適合性全体を保証するものではありません。対応ソースの未確認事項は§5.3を参照してください。
 
 ---
 
@@ -26,11 +26,11 @@
 | `package-lock.json`                     | Electron アプリ本体の npm 依存（@google/genai、@huggingface/transformers、electron-squirrel-startup、ollama、ws ほか） |
 | `native/daddy-audio-capture/Cargo.lock` | Rust 製ネイティブヘルパ（WASAPI loopback 録音）の Cargo 依存                                                           |
 
-これらは `npm ci` および `cargo build --locked` に渡すことで、リリース時と同一の依存ツリーを再現できます。
+これらは `npm ci` および `cargo build --locked` で使用する依存バージョン・取得先・整合性情報を記録します。依存の取得には外部配布元へのアクセスが必要です。lockfile自体は第三者ソースの複製ではなく、取得先の継続提供やソース一式の完全性を保証しません。
 
 ### 1.2 同梱されないもの（ランディングページ・社内運用ドキュメント）
 
-`lp/`（ランディングページの Astro / Cloudflare Pages Functions ソース）は `source.zip` に含まれません。`lp/` は本ソフト（配布される Electron バイナリ）の一部ではなく、運用者が別途ホストする決済・配布用の Web サービスであるため、本ソフトの GPL-3.0 対応ソース（Corresponding Source）の範囲外です。同様に、社内限定の運用手順書・意思決定ログなども対応ソースに含まれません。
+`lp/`、社内運用ドキュメント、エージェント設定、非公開の回帰fixtureとそれに依存するテスト等は `.gitattributes` の `export-ignore` により除外します。これらは現在のElectronアプリのビルド入力として使用していません。「すべての追跡ファイル／すべてのテストが入る」という意味ではありません。除外設定を変更した場合は、生成・インストール・実行・改変に必要なソースやスクリプトを除いていないか再点検してください。
 
 ---
 
@@ -60,6 +60,16 @@ Expand-Archive -Path source.zip -DestinationPath C:\build
 cd C:\build\whisper-oh-kami-<version>
 ```
 
+ZIPには `.git` が含まれません。一方、`npm run make` の末尾処理は `git rev-parse HEAD` 等でビルド来歴を記録します。ZIPからインストーラを作る場合は、**既存のGitリポジトリの外へ展開**したうえで、依存インストール・改変前に次のローカル履歴を用意してください。
+
+```powershell
+git init
+git add .
+git -c user.name="Local Builder" -c user.email="builder@example.invalid" commit -m "Import source archive for local build"
+```
+
+これはビルド用のローカルコミットであり、配布元の `manifest.json.commitSha` と同じSHAにはなりません。取得した元のZIPとmanifestは別に保管してください。改変して配布候補を作る場合は、自分の変更を記録してからビルドします。公開Gitリポジトリをcloneし、対象リリースのコミットをcheckoutした場合は、この初期化は不要です。展開したソースを `npm start` / `npm run package` で実行・パッケージ化するだけなら、インストーラ用のpostMake処理は呼ばれません。
+
 ### 3.2 npm 依存のインストール（ルート）
 
 ```powershell
@@ -76,7 +86,7 @@ $env:RUSTFLAGS = "--remap-path-prefix $env:USERPROFILE=/build --remap-path-prefi
 cargo build --release --locked
 Remove-Item Env:\RUSTFLAGS
 cd ..\..
-copy /Y native\daddy-audio-capture\target\release\daddy-audio-capture.exe src\assets\daddyAudioCapture.exe
+Copy-Item -LiteralPath native\daddy-audio-capture\target\release\daddy-audio-capture.exe -Destination src\assets\daddyAudioCapture.exe -Force
 ```
 
 `--locked` フラグは `Cargo.lock` を厳密に使うことを Cargo に強制します。ビルド成果物は `native\daddy-audio-capture\target\release\daddy-audio-capture.exe` に出力されます。
@@ -126,41 +136,52 @@ Electron Forge が起動し、`out\make\squirrel.windows\x64\` 配下に Squirre
 
 ## 4. 配布バンドルとのバイナリ一致
 
-理論上、上記手順で得られたインストーラの SHA-256 は配布バンドル同梱の `installer.exe` の SHA-256（`manifest.json.items[].sha256`）と一致するはずです。実際には次の要因で一致しない場合があります。
+ソースとlockfileが同じでも、再ビルドしたインストーラのSHA-256が配布物と一致するとは限りません。既存の `manifest.json.items[].sha256` は受け取った配布ファイルの照合用であり、別環境の再ビルド結果を保証する値ではありません。例えば次の要因で差が生じます。
 
-| 要因                                                                               | 対策                                                                                                                            |
-| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Node.js / Rust のパッチバージョン違い                                              | 同じパッチバージョンを使ってください                                                                                            |
-| ローカルの環境変数（`SOURCE_DATE_EPOCH` 未設定など）                               | 再現ビルド用の環境変数を揃えてください（電子署名なし版では現状未設定）                                                          |
-| ネイティブヘルパのビルド時に `RUSTFLAGS` の `--remap-path-prefix` を指定していない | §3.3 のとおり指定してください。指定しないとビルドマシンの絶対パスがバイナリに埋め込まれ、配布物と一致しません                   |
-| Electron バージョンのタイミング差（電子署名・タイムスタンプの非決定性）            | `manifest.json.expectedAuthenticodeState` が `unsigned-beta` であることを前提とした上で、署名関連を含まないため通常は一致します |
-| 一時ファイルの差（ビルドホストの `tmp` 経路）                                      | Electron Forge の出力は決定的ですが、Squirrel が埋め込む CRC や zip タイムスタンプにより数バイト差が出る場合があります          |
+| 要因                                                                               | 対策                                                                                                          |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Node.js / Rust のパッチバージョン違い                                              | 同じパッチバージョンを使ってください                                                                          |
+| ローカルの環境変数（`SOURCE_DATE_EPOCH` 未設定など）                               | 再現ビルド用の環境変数を揃えてください（電子署名なし版では現状未設定）                                        |
+| ネイティブヘルパのビルド時に `RUSTFLAGS` の `--remap-path-prefix` を指定していない | §3.3 のとおり指定してください。指定しないとビルドマシンの絶対パスがバイナリに埋め込まれ、配布物と一致しません |
+| Electronやネイティブ依存の取得物、署名の有無・タイムスタンプ                       | lockfileの版と配布ファイルの取得元・ハッシュ、署名状態を記録してください                                      |
+| 一時パス、ファイル時刻、圧縮コンテナのメタデータ                                   | ビルド環境・時刻等を記録してください。Forge／Squirrelの出力が常に決定的とは仮定しません                       |
 
-完全な byte-for-byte の再現性は本サービス v1 のスコープでは保証していません。**機能等価性**および**ソース等価性**（`source.zip` の内容が手元の作業ツリーと同一であること）は保証します。
+確認対象は、配布候補の製品ソースZIPが対象コミットと一致すること、ビルド来歴と配布ファイルのハッシュが対応することです。完全なbyte-for-byte再現性や、任意の環境・改変後の機能等価性は保証していません。再ビルド後はその環境で動作を検証してください。
 
 ---
 
-## 5. GPL-3.0 対応ソース（Corresponding Source）の到達手段
+## 5. ソースの提供方法と確認範囲
 
-GPL-3.0 §6 で要求される「対応ソースの提供」は次の手段で果たしています。
+### 5.1 参照するライセンスと提供方法
 
-1. **§6(a) - 物理メディア配布**: 本サービスでは行っていません。
-2. **§6(b) - 同等の手段による対応ソースの提供義務**: 該当しません（再配布ではなく初版配布のため）。
-3. **§6(d) - サーバからのダウンロード**: 配布バンドルに `source.zip` を直接同梱しています。`/api/download` の `source` ArtifactKind 経由でいつでも再取得できます。
-4. **§6(c) - 個別の対応ソース申し出**: 申し出は不要です（同梱しているため）。
+一次資料は [GNU GPLv3本文](https://www.gnu.org/licenses/gpl-3.0.html)（同内容の `LICENSE` を同梱）です。GNU公式プロジェクトの [Emacs COPYING](https://git.savannah.gnu.org/cgit/emacs.git/plain/COPYING) でも本文を確認できます。
 
-`source.zip` には次のものが含まれます。
+GPLv3 §1は、改変に適した形式のソースと、生成・インストール・実行・改変に必要なソース／制御スクリプトを対応ソースの基準とし、System Libraries等の除外条件を定めています。**外部からlockfileで再取得できることだけを理由に、依存のソースが不要になるわけではありません。** 同じ対応ソースの他の部分から自動再生成できるものの扱いと、外部パッケージのダウンロードは区別してください。
 
-- すべての `*.js` / `*.ts` / `*.rs` ファイル（`src/`、`native/`、`scripts/`、`tests/`）
-- ビルドに必要な `package.json` / `Cargo.toml` / `Cargo.lock` / `package-lock.json`（root）
-- ライセンス（`LICENSE`）と第三者通知（`THIRD_PARTY_NOTICES.md`）
-- 本ガイド（`docs/distribution/build-from-source.md`）と Windows インストールガイド（`docs/distribution/windows-install-guide.md`）、その他 `docs/legal/`・`docs/brand/`・`docs/distribution/` 配下の公開ドキュメント
-- リポジトリの設定ファイル（`forge.config.js`、`.prettierrc`、`.github/`（CI 設定）等）
-- ビルド済みのネイティブヘルパ `src/assets/daddyAudioCapture.exe`（Rust ツールチェーン無しでもビルドできるようリポジトリに同梱しています。対応するソースは `native/daddy-audio-capture/` にあり、§3.3 の手順で再ビルド・差し替えできます）
+オンライン配布では§6(d)の条件を確認します。バイナリの入手場所で、追加料金なく同等の方法で対応ソースへアクセスできるようにし、別サーバを使う場合もバイナリの近くに明確な取得案内を置き、必要な期間の入手可能性を確保する必要があります。§6(b)は物理製品等に書面によるソース提供の申し出を伴わせる方法、§6(c)はその申し出を受け取った場合の限定的な非商業的再配布の方法です。「初版だから免除」とは説明しません。
 
-`node_modules/` は同梱しません（GPL §6 上、ロックファイルから機械的に再現できる依存は対応ソースに含める必要はありません）。
+現在の製品ソースの案内先は [GitHub Releases](https://github.com/kintaro1221/whisper-oh-kami/releases) の対象タグと公開リポジトリです。候補バンドルでは `source.zip` と `lockfiles.zip` を生成し、`manifest.json.commitSha` と各SHA-256で対象を識別します。**ローカル候補の生成は公開配布経路の提供確認ではありません。** 公開時には、最終バイナリと同じコミットを指す製品ソース、および以下の第三者ソースの提供案内が受領者から取得できることを確認してください。現在提供していない有償配信APIを、取得保証の根拠にはしません。
 
-`lp/`（ランディングページ・決済インフラのソース）および社内限定の運用ドキュメント（`docs/operations/`、`docs/superpowers/`、`docs/decisions/`、`docs/legal/REVIEW-NOTES.md` ほか）は同梱しません。これらは本ソフト（配布される Electron バイナリ）の対応ソースではなく、運用者側のインフラ・内部意思決定記録です（`.gitattributes` の `export-ignore` により `git archive` の時点で除外されます）。
+### 5.2 実際に含まれるもの／含まれないもの
+
+| 区分                        | 候補 `source.zip` の内容と参照先                                                                                                                                                                                                                                                                                                |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| アプリ本体                  | `src/` のJavaScript・画面・アセット、`forge.config.js`、公開ビルドスクリプト、公開テスト、設定・公開文書。§1.2の除外あり。                                                                                                                                                                                                      |
+| 録音ヘルパ                  | `native/daddy-audio-capture/` のRustソース、Cargo.toml／Cargo.lockと、配布用 `src/assets/daddyAudioCapture.exe`。再ビルド手順は§3.3。                                                                                                                                                                                           |
+| npm依存                     | package.json／package-lock.jsonを収録。`node_modules/`、各依存の上流ソースアーカイブ一式は未収録。lockfileのversion／resolved／integrityはパッケージ取得の手掛かりです。                                                                                                                                                        |
+| Rust依存                    | Cargo.lockを収録。依存crateのソースをvendorしたディレクトリは未収録。lockfileの版・registry・checksumを参照。                                                                                                                                                                                                                   |
+| sharp Windowsネイティブ依存 | `scripts/licenses/sharp-win32-x64-0.35.5.json` に29ライブラリの版とライセンス出典を記録。これはライセンスinventoryであり、完全なソース／ビルドスクリプト一式ではありません。上流は [sharp v0.35.5](https://github.com/lovell/sharp/tree/v0.35.5)、[sharp-libvips v1.3.4](https://github.com/lovell/sharp-libvips/tree/v1.3.4)。 |
+| Electron・ONNX等            | 版はlockfileに記録。インストーラには実行用バイナリを同梱しますが、これらの上流開発ソース一式はsource.zipに収録していません。ライセンスと出典はTHIRD_PARTY_NOTICESおよびElectronのLICENSES.chromium.htmlを参照。                                                                                                                 |
+| Whisperモデル               | 取得スクリプトと `scripts/whisper-models.manifest.json`（取得元・版・SHA-256）を収録。モデルファイルはsource.zipに含めず、Tiny/Smallをインストーラへ別添します。                                                                                                                                                                |
+| 通知・ライセンス            | LICENSE、THIRD_PARTY_NOTICES、同梱アセットのライセンス。通知の収録自体は、対応ソース全体の提供確認とは別です。                                                                                                                                                                                                                  |
+
+### 5.3 公開前に残る確認
+
+製品ソースのGit一致・ビルド入力の収録と、第三者を含む対応ソースの完全性は別の確認です。この候補では、特に `@img/sharp-win32-x64` に含まれるLGPL対象のlibvips等について、実際のバイナリに対応する改変用ソース・ビルド手順・パッチ一式を収集／照合し、必要範囲と継続提供方法を確定する確認が残っています。npmパッケージ内の配布コードだけで改変用の元ソースを満たすか、各依存がGPL §1の除外条件に該当するかも一律には判定していません。
+
+Windows版の追跡では、[sharp-libvips v1.3.4 の build/win.sh](https://github.com/lovell/sharp-libvips/blob/v1.3.4/build/win.sh) が、[build-win64-mxe v8.18.7](https://github.com/libvips/build-win64-mxe/tree/v8.18.7) のビルド済みZIPを取得・加工します。さらに上流のビルド設定にはMXEとパッチの適用があります。これらの公開リポジトリは調査先ですが、実配布DLLに対応する全ソース・パッチ・設定の組合せと取得物は未照合です。sharpのC++ラッパーやライセンス一覧だけで、DLL側の対応ソースの提供完了とは判定していません。
+
+上記の上流リンクやlockfileだけで全義務を満たすと断定せず、対象ごとのライセンス条件と実ファイルを確認し、必要なソース・取得案内を補ってから公開してください。これは不足や適法性を一律に断定するものではなく、現在確認できた収録範囲と未解決事項の明示です。
 
 ---
 
