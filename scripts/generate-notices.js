@@ -150,25 +150,25 @@ const MANUAL_LICENSE_TEXTS = {
         note: 'License text below is the SPDX canonical ISC template populated from the package metadata. The upstream npm tarball at version 1.0.9 ships no LICENSE file; the package.json declares `license: "ISC"` and `author: "nicolas"`. This entry is a best-effort attribution, not a verbatim reproduction of an upstream-authored LICENSE document.',
     },
 
-    'onnxruntime-common@1.24.0-dev.20251116-b39e144322': {
+    'onnxruntime-common@1.31.0-dev.20260911-2a43ec07e': {
         text: MS_ONNXRUNTIME_MIT,
         provenance: 'verbatim',
-        note: 'License text below reproduced verbatim from the Microsoft onnxruntime monorepo LICENSE at the commit sha embedded in the version string (https://github.com/microsoft/onnxruntime/blob/b39e144322/LICENSE). The monorepo publishes multiple npm packages from one repo; LICENSE lives only at the repo root. SPDX: MIT.',
+        note: 'License text below reproduced verbatim from the Microsoft onnxruntime monorepo LICENSE at the commit sha embedded in the version string (https://github.com/microsoft/onnxruntime/blob/2a43ec07e/LICENSE). The monorepo publishes multiple npm packages from one repo; LICENSE lives only at the repo root. SPDX: MIT.',
     },
-    'onnxruntime-common@1.24.3': {
+    'onnxruntime-common@1.30.0': {
         text: MS_ONNXRUNTIME_MIT,
         provenance: 'verbatim',
-        note: 'License text below reproduced verbatim from microsoft/onnxruntime LICENSE at tag v1.24.3 (https://github.com/microsoft/onnxruntime/blob/v1.24.3/LICENSE). SPDX: MIT.',
+        note: 'License text below reproduced verbatim from microsoft/onnxruntime LICENSE at tag v1.30.0 (https://github.com/microsoft/onnxruntime/blob/v1.30.0/LICENSE). SPDX: MIT.',
     },
-    'onnxruntime-node@1.24.3': {
+    'onnxruntime-node@1.30.0': {
         text: MS_ONNXRUNTIME_MIT,
         provenance: 'verbatim',
-        note: 'License text below reproduced verbatim from microsoft/onnxruntime LICENSE at tag v1.24.3 (https://github.com/microsoft/onnxruntime/blob/v1.24.3/LICENSE). SPDX: MIT.',
+        note: 'License text below reproduced verbatim from microsoft/onnxruntime LICENSE at tag v1.30.0 (https://github.com/microsoft/onnxruntime/blob/v1.30.0/LICENSE). SPDX: MIT.',
     },
-    'onnxruntime-web@1.26.0-dev.20260416-b7804b056c': {
+    'onnxruntime-web@1.31.0-dev.20260914-8d85527a0': {
         text: MS_ONNXRUNTIME_MIT,
         provenance: 'verbatim',
-        note: 'License text below reproduced verbatim from the Microsoft onnxruntime monorepo LICENSE at the commit sha embedded in the version string (https://github.com/microsoft/onnxruntime/blob/b7804b056c/LICENSE). SPDX: MIT.',
+        note: 'License text below reproduced verbatim from the Microsoft onnxruntime monorepo LICENSE at the commit sha embedded in the version string (https://github.com/microsoft/onnxruntime/blob/8d85527a0/LICENSE). SPDX: MIT.',
     },
 };
 
