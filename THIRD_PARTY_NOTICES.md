@@ -3,7 +3,7 @@
 WhisperOhKAMI bundles the third-party open-source packages listed below.
 Each package is the property of its respective authors and is distributed under its own license.
 
-Total packages: 82
+Total packages: 75
 Vendored assets: 5
 Rust registry crates: 52
 Sharp bundled libraries: 29
@@ -282,7 +282,7 @@ Apache License
 
 ---
 
-## @huggingface/jinja@0.5.9
+## @huggingface/jinja@0.5.10
 
 License: MIT
 
@@ -312,7 +312,7 @@ SOFTWARE.
 
 ---
 
-## @huggingface/tokenizers@0.1.3
+## @huggingface/tokenizers@0.2.0
 
 License: Apache-2.0
 
@@ -522,7 +522,7 @@ Apache License
 
 ---
 
-## @huggingface/transformers@4.2.0
+## @huggingface/transformers@4.3.1
 
 License: Apache-2.0
 
@@ -823,7 +823,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ---
 
-## @img/sharp-win32-x64@0.35.4
+## @img/sharp-win32-x64@0.35.5
 
 License: Apache-2.0 AND LGPL-3.0-or-later
 
@@ -1523,23 +1523,6 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 ---
 
-## boolean@3.2.0
-
-License: MIT
-
-```
-The MIT License (MIT)
-Copyright (c) 2014-2022 the native web.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-```
-
----
-
 ## buffer-equal-constant-time@1.0.1
 
 License: BSD-3-Clause
@@ -1917,36 +1900,6 @@ Apache License
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
-```
-
----
-
-## detect-node@2.1.0
-
-License: MIT
-
-```
-MIT License
-
-Copyright (c) 2017 Ilya Kantor
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
 ```
 
 ---
@@ -2409,36 +2362,6 @@ License: MIT
 MIT License
 
 Copyright (c) 2024 Jordan Harband
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
----
-
-## es6-error@4.1.1
-
-License: MIT
-
-```
-The MIT License (MIT)
-
-Copyright (c) 2015 Ben Youngblood
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -3200,12 +3123,12 @@ Apache License
 
 ---
 
-## global-agent@3.0.0
+## global-agent@4.1.3
 
 License: BSD-3-Clause
 
 ```
-Copyright (c) 2019, Gajus Kuizinas (http://gajus.com/)
+Copyright (c) 2026, Gajus Kuizinas (https://gajus.com/)
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -3215,7 +3138,7 @@ modification, are permitted provided that the following conditions are met:
     * Redistributions in binary form must reproduce the above copyright
       notice, this list of conditions and the following disclaimer in the
       documentation and/or other materials provided with the distribution.
-    * Neither the name of the Gajus Kuizinas (http://gajus.com/) nor the
+    * Neither the name of the Gajus Kuizinas (https://gajus.com/) nor the
       names of its contributors may be used to endorse or promote products
       derived from this software without specific prior written permission.
 
@@ -3831,30 +3754,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ---
 
-## json-stringify-safe@5.0.1
-
-License: ISC
-
-```
-The ISC License
-
-Copyright (c) Isaac Z. Schlueter and Contributors
-
-Permission to use, copy, modify, and/or distribute this software for any
-purpose with or without fee is hereby granted, provided that the above
-copyright notice and this permission notice appear in all copies.
-
-THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
-IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-```
-
----
-
 ## jwa@2.0.1
 
 License: MIT
@@ -4117,7 +4016,7 @@ Apache License
 
 ---
 
-## matcher@3.0.0
+## matcher@4.0.0
 
 License: MIT
 
@@ -4315,13 +4214,13 @@ SOFTWARE.
 
 ---
 
-## onnxruntime-common@1.24.0-dev.20251116-b39e144322
+## onnxruntime-common@1.30.0
 
 License: MIT
 
 _License text supplied from `scripts/generate-notices.js` `MANUAL_LICENSE_TEXTS` (provenance: verbatim)._
 
-_License text below reproduced verbatim from the Microsoft onnxruntime monorepo LICENSE at the commit sha embedded in the version string (https://github.com/microsoft/onnxruntime/blob/b39e144322/LICENSE). The monorepo publishes multiple npm packages from one repo; LICENSE lives only at the repo root. SPDX: MIT._
+_License text below reproduced verbatim from microsoft/onnxruntime LICENSE at tag v1.30.0 (https://github.com/microsoft/onnxruntime/blob/v1.30.0/LICENSE). SPDX: MIT._
 
 ```
 MIT License
@@ -4349,13 +4248,13 @@ SOFTWARE.
 
 ---
 
-## onnxruntime-common@1.24.3
+## onnxruntime-common@1.31.0-dev.20260911-2a43ec07e
 
 License: MIT
 
 _License text supplied from `scripts/generate-notices.js` `MANUAL_LICENSE_TEXTS` (provenance: verbatim)._
 
-_License text below reproduced verbatim from microsoft/onnxruntime LICENSE at tag v1.24.3 (https://github.com/microsoft/onnxruntime/blob/v1.24.3/LICENSE). SPDX: MIT._
+_License text below reproduced verbatim from the Microsoft onnxruntime monorepo LICENSE at the commit sha embedded in the version string (https://github.com/microsoft/onnxruntime/blob/2a43ec07e/LICENSE). The monorepo publishes multiple npm packages from one repo; LICENSE lives only at the repo root. SPDX: MIT._
 
 ```
 MIT License
@@ -4383,13 +4282,13 @@ SOFTWARE.
 
 ---
 
-## onnxruntime-node@1.24.3
+## onnxruntime-node@1.30.0
 
 License: MIT
 
 _License text supplied from `scripts/generate-notices.js` `MANUAL_LICENSE_TEXTS` (provenance: verbatim)._
 
-_License text below reproduced verbatim from microsoft/onnxruntime LICENSE at tag v1.24.3 (https://github.com/microsoft/onnxruntime/blob/v1.24.3/LICENSE). SPDX: MIT._
+_License text below reproduced verbatim from microsoft/onnxruntime LICENSE at tag v1.30.0 (https://github.com/microsoft/onnxruntime/blob/v1.30.0/LICENSE). SPDX: MIT._
 
 ```
 MIT License
@@ -4417,13 +4316,13 @@ SOFTWARE.
 
 ---
 
-## onnxruntime-web@1.26.0-dev.20260416-b7804b056c
+## onnxruntime-web@1.31.0-dev.20260914-8d85527a0
 
 License: MIT
 
 _License text supplied from `scripts/generate-notices.js` `MANUAL_LICENSE_TEXTS` (provenance: verbatim)._
 
-_License text below reproduced verbatim from the Microsoft onnxruntime monorepo LICENSE at the commit sha embedded in the version string (https://github.com/microsoft/onnxruntime/blob/b7804b056c/LICENSE). SPDX: MIT._
+_License text below reproduced verbatim from the Microsoft onnxruntime monorepo LICENSE at the commit sha embedded in the version string (https://github.com/microsoft/onnxruntime/blob/8d85527a0/LICENSE). SPDX: MIT._
 
 ```
 MIT License
@@ -4577,39 +4476,6 @@ Felix Geisendörfer (felix@debuggable.com)
 
 ---
 
-## roarr@2.15.4
-
-License: BSD-3-Clause
-
-```
-Copyright (c) 2019, Gajus Kuizinas (http://gajus.com/)
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-    * Redistributions of source code must retain the above copyright
-      notice, this list of conditions and the following disclaimer.
-    * Redistributions in binary form must reproduce the above copyright
-      notice, this list of conditions and the following disclaimer in the
-      documentation and/or other materials provided with the distribution.
-    * Neither the name of the Gajus Kuizinas (http://gajus.com/) nor the
-      names of its contributors may be used to endorse or promote products
-      derived from this software without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL ANUARY BE LIABLE FOR ANY
-DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-```
-
----
-
 ## safe-buffer@5.2.1
 
 License: MIT
@@ -4664,34 +4530,7 @@ IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ---
 
-## semver-compare@1.0.0
-
-License: MIT
-
-```
-This software is released under the MIT license:
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the "Software"), to deal in
-the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software is furnished to do so,
-subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-```
-
----
-
-## serialize-error@7.0.1
+## serialize-error@8.1.0
 
 License: MIT
 
@@ -4709,7 +4548,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ---
 
-## sharp@0.35.4
+## sharp@0.35.5
 
 License: Apache-2.0
 
@@ -4909,40 +4748,7 @@ third-party archives.
 
 ---
 
-## sprintf-js@1.1.3
-
-License: BSD-3-Clause
-
-```
-Copyright (c) 2007-present, Alexandru Mărășteanu <hello@alexei.ro>
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-* Redistributions of source code must retain the above copyright
-  notice, this list of conditions and the following disclaimer.
-* Redistributions in binary form must reproduce the above copyright
-  notice, this list of conditions and the following disclaimer in the
-  documentation and/or other materials provided with the distribution.
-* Neither the name of this software nor the names of its contributors may be
-  used to endorse or promote products derived from this software without
-  specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR
-ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-```
-
----
-
-## type-fest@0.13.1
+## type-fest@0.20.2
 
 License: (MIT OR CC0-1.0)
 
@@ -7460,7 +7266,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## Bundled libraries in @img/sharp-win32-x64@0.35.4
+## Bundled libraries in @img/sharp-win32-x64@0.35.5
 
 The following package README is reproduced verbatim (line endings normalized). Its upstream links are attribution, not pinned license-text provenance.
 
@@ -7489,7 +7295,7 @@ used under the terms of the following licenses:
 | Library       | Used under the terms of                                                                                   |
 |---------------|-----------------------------------------------------------------------------------------------------------|
 | aom           | BSD 2-Clause + [Alliance for Open Media Patent License 1.0](https://aomedia.org/license/patent-license/)  |
-| cairo         | Mozilla Public License 2.0                                                                                |
+| cairo         | Mozilla Public License 1.1                                                                                |
 | cgif          | MIT License                                                                                               |
 | expat         | MIT License                                                                                               |
 | fontconfig    | [fontconfig License](https://gitlab.freedesktop.org/fontconfig/fontconfig/blob/main/COPYING) (BSD-like)   |
@@ -7525,11 +7331,11 @@ Please report any errors or omissions via
 https://github.com/lovell/sharp-libvips/issues/new
 
 
-Source code for the LGPL-licensed libraries bundled with sharp (libvips 8.18.6) is available from https://github.com/lovell/sharp-libvips/releases/tag/v1.3.3
+Source code for the LGPL-licensed libraries bundled with sharp (libvips 8.18.7) is available from https://github.com/lovell/sharp-libvips/releases/tag/v1.3.4
 
-### aom@3.14.1
+### aom@3.15.1
 
-Pinned source: https://aomedia.googlesource.com/aom/+/refs/tags/v3.14.1/LICENSE?format=TEXT
+Pinned source: https://aomedia.googlesource.com/aom/+/refs/tags/v3.15.1/LICENSE?format=TEXT
 
 ```
 Copyright (c) 2016, Alliance for Open Media. All rights reserved.
@@ -7562,7 +7368,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 ```
 
-Additional pinned source: https://aomedia.googlesource.com/aom/+/refs/tags/v3.14.1/PATENTS?format=TEXT
+Additional pinned source: https://aomedia.googlesource.com/aom/+/refs/tags/v3.15.1/PATENTS?format=TEXT
 
 ```
 Alliance for Open Media Patent License 1.0
@@ -7676,9 +7482,9 @@ Alliance for Open Media Patent License 1.0
 
 ```
 
-### cairo@1.18.4
+### cairo@1.18.6
 
-Pinned source: https://gitlab.freedesktop.org/cairo/cairo/-/raw/1.18.4/COPYING
+Pinned source: https://gitlab.freedesktop.org/cairo/cairo/-/raw/1.18.6/COPYING
 
 ```
 Cairo is free software.
@@ -7719,7 +7525,7 @@ and licensing information.
 
 License election: cairo is used under the Mozilla Public License, as listed for cairo in the sharp package README above and in https://github.com/lovell/sharp-libvips/blob/v1.3.3/THIRD-PARTY-NOTICES.md (Mozilla Public License 2.0). cairo 1.18.4 COPYING (reproduced verbatim above) offers LGPL 2.1 or MPL 1.1; the MPL 1.1 text is reproduced below, and the LGPL 2.1 text is retained for completeness.
 
-Additional pinned source: https://gitlab.freedesktop.org/cairo/cairo/-/raw/1.18.4/COPYING-LGPL-2.1
+Additional pinned source: https://gitlab.freedesktop.org/cairo/cairo/-/raw/1.18.6/COPYING-LGPL-2.1
 
 ```
 
@@ -8235,7 +8041,7 @@ That's all there is to it!
 
 ```
 
-Additional pinned source: https://gitlab.freedesktop.org/cairo/cairo/-/raw/1.18.4/COPYING-MPL-1.1
+Additional pinned source: https://gitlab.freedesktop.org/cairo/cairo/-/raw/1.18.6/COPYING-MPL-1.1
 
 ```
                           MOZILLA PUBLIC LICENSE
@@ -8711,9 +8517,9 @@ EXHIBIT A -Mozilla Public License.
 
 ```
 
-### cgif@0.5.3
+### cgif@0.5.4
 
-Pinned source: https://raw.githubusercontent.com/dloebl/cgif/v0.5.3/LICENSE
+Pinned source: https://raw.githubusercontent.com/dloebl/cgif/v0.5.4/LICENSE
 
 ```
 MIT License
@@ -8740,9 +8546,9 @@ SOFTWARE.
 
 ```
 
-### expat@2.8.3
+### expat@2.8.5
 
-Pinned source: https://raw.githubusercontent.com/libexpat/libexpat/R_2_8_3/COPYING
+Pinned source: https://raw.githubusercontent.com/libexpat/libexpat/R_2_8_5/COPYING
 
 ```
 Copyright (c) 1998-2000 Thai Open Source Software Center Ltd and Clark Cooper
@@ -9154,16 +8960,16 @@ Legal Terms
 
 ```
 
-### fribidi@1.0.16
+### fribidi@1.0.17
 
-Pinned source: https://raw.githubusercontent.com/fribidi/fribidi/v1.0.16/COPYING
+Pinned source: https://raw.githubusercontent.com/fribidi/fribidi/v1.0.17/COPYING
 
 ```
-		  GNU LESSER GENERAL PUBLIC LICENSE
-		       Version 2.1, February 1999
+                  GNU LESSER GENERAL PUBLIC LICENSE
+                       Version 2.1, February 1999
 
  Copyright (C) 1991, 1999 Free Software Foundation, Inc.
-     51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ <https://fsf.org/>
  Everyone is permitted to copy and distribute verbatim copies
  of this license document, but changing it is not allowed.
 
@@ -9171,7 +8977,7 @@ Pinned source: https://raw.githubusercontent.com/fribidi/fribidi/v1.0.16/COPYING
  as the successor of the GNU Library Public License, version 2, hence
  the version number 2.1.]
 
-			    Preamble
+                            Preamble
 
   The licenses for most software are designed to take away your
 freedom to share and change it.  By contrast, the GNU General Public
@@ -9273,7 +9079,7 @@ modification follow.  Pay close attention to the difference between a
 former contains code derived from the library, whereas the latter must
 be combined with the library in order to run.
 
-		  GNU LESSER GENERAL PUBLIC LICENSE
+                  GNU LESSER GENERAL PUBLIC LICENSE
    TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
 
   0. This License Agreement applies to any software library or other
@@ -9307,7 +9113,7 @@ such a program is covered only if its contents constitute a work based
 on the Library (independent of the use of the Library in a tool for
 writing it).  Whether that is true depends on what the Library does
 and what the program that uses the Library does.
-  
+
   1. You may copy and distribute verbatim copies of the Library's
 complete source code as you receive it, in any medium, provided that
 you conspicuously and appropriately publish on each copy an
@@ -9593,7 +9399,7 @@ decision will be guided by the two goals of preserving the free status
 of all derivatives of our free software and of promoting the sharing
 and reuse of software generally.
 
-			    NO WARRANTY
+                            NO WARRANTY
 
   15. BECAUSE THE LIBRARY IS LICENSED FREE OF CHARGE, THERE IS NO
 WARRANTY FOR THE LIBRARY, TO THE EXTENT PERMITTED BY APPLICABLE LAW.
@@ -9616,7 +9422,7 @@ FAILURE OF THE LIBRARY TO OPERATE WITH ANY OTHER SOFTWARE), EVEN IF
 SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH
 DAMAGES.
 
-		     END OF TERMS AND CONDITIONS
+                     END OF TERMS AND CONDITIONS
 
            How to Apply These Terms to Your New Libraries
 
@@ -9645,8 +9451,7 @@ convey the exclusion of warranty; and each file should have at least the
     Lesser General Public License for more details.
 
     You should have received a copy of the GNU Lesser General Public
-    License along with this library; if not, write to the Free Software
-    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+    License along with this library; if not, see <https://www.gnu.org/licenses/>.
 
 Also add information on how to contact you by electronic and paper mail.
 
@@ -9657,18 +9462,16 @@ necessary.  Here is a sample; alter the names:
   Yoyodyne, Inc., hereby disclaims all copyright interest in the
   library `Frob' (a library for tweaking knobs) written by James Random Hacker.
 
-  <signature of Ty Coon>, 1 April 1990
-  Ty Coon, President of Vice
+  <signature of Moe Ghoul>, 1 April 1990
+  Moe Ghoul, President of Vice
 
 That's all there is to it!
 
-
-
 ```
 
-### glib@2.89.4
+### glib@2.90.0
 
-Pinned source: https://raw.githubusercontent.com/GNOME/glib/2.89.4/LICENSES/LGPL-2.1-or-later.txt
+Pinned source: https://raw.githubusercontent.com/GNOME/glib/2.90.0/LICENSES/LGPL-2.1-or-later.txt
 
 ```
 GNU LESSER GENERAL PUBLIC LICENSE
@@ -9849,9 +9652,9 @@ That's all there is to it!
 
 ```
 
-### harfbuzz@14.3.1
+### harfbuzz@14.5.0
 
-Pinned source: https://raw.githubusercontent.com/harfbuzz/harfbuzz/14.3.1/COPYING
+Pinned source: https://raw.githubusercontent.com/harfbuzz/harfbuzz/14.5.0/COPYING
 
 ```
 HarfBuzz is licensed under the so-called "Old MIT" license.  Details follow.
@@ -10921,9 +10724,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ```
 
-### libheif@1.23.2
+### libheif@1.23.5
 
-Pinned source: https://raw.githubusercontent.com/strukturag/libheif/v1.23.2/COPYING
+Pinned source: https://raw.githubusercontent.com/strukturag/libheif/v1.23.5/COPYING
 
 ```
 * The library `libheif` is distributed under the terms of the GNU Lesser General Public License.
@@ -11844,9 +11647,9 @@ implied warranty.
 
 ```
 
-### libnsgif (vendored in libvips@8.18.6)
+### libnsgif (vendored in libvips@8.18.7)
 
-Pinned source: https://raw.githubusercontent.com/libvips/libvips/v8.18.6/libvips/foreign/libnsgif/COPYING
+Pinned source: https://raw.githubusercontent.com/libvips/libvips/v8.18.7/libvips/foreign/libnsgif/COPYING
 
 ```
 Copyright (C) 2004 Richard Wilson
@@ -11870,6 +11673,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+
 ```
 
 libnsgif (NetSurf, MIT License) has no separate release in the sharp binary: it is compiled from the copy vendored in the libvips 8.18.6 source tree (libvips/foreign/libnsgif, upstream snapshot last updated 22 Jan 2023), so it carries no version of its own in versions.json. The MIT License listing is confirmed by https://github.com/lovell/sharp-libvips/blob/v1.3.3/THIRD-PARTY-NOTICES.md (that notice is a license table only and reproduces no text); the text above is the vendored COPYING file at the pinned libvips tag.
@@ -12016,9 +11820,9 @@ be appreciated.
 
 ```
 
-### librsvg@2.62.91
+### librsvg@2.63.2
 
-Pinned source: https://raw.githubusercontent.com/GNOME/librsvg/2.62.91/COPYING.LIB
+Pinned source: https://raw.githubusercontent.com/GNOME/librsvg/2.63.2/COPYING.LIB
 
 ```
                   GNU LESSER GENERAL PUBLIC LICENSE
@@ -12821,9 +12625,9 @@ SOFTWARE.
 
 ```
 
-### libvips@8.18.6
+### libvips@8.18.7
 
-Pinned source: https://raw.githubusercontent.com/libvips/libvips/v8.18.6/LICENSE
+Pinned source: https://raw.githubusercontent.com/libvips/libvips/v8.18.7/LICENSE
 
 ```
                   GNU LESSER GENERAL PUBLIC LICENSE
@@ -13679,9 +13483,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ```
 
-### libxml2@2.15.3
+### libxml2@2.15.4
 
-Pinned source: https://raw.githubusercontent.com/GNOME/libxml2/v2.15.3/Copyright
+Pinned source: https://raw.githubusercontent.com/GNOME/libxml2/v2.15.4/Copyright
 
 ```
 Except where otherwise noted in the source code (e.g. the files dict.c and
