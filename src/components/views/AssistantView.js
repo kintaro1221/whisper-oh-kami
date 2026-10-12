@@ -1105,50 +1105,8 @@ export class AssistantView extends LitElement {
     }
 
     renderMarkdown(content) {
-        if (typeof window !== 'undefined' && window.marked) {
-            try {
-                window.marked.setOptions({
-                    breaks: true,
-                    gfm: true,
-                    sanitize: false,
-                });
-                let rendered = window.marked.parse(content);
-                rendered = this.wrapWordsInSpans(rendered);
-                return rendered;
-            } catch (error) {
-                console.warn('Error parsing markdown:', error);
-                return content;
-            }
-        }
-        return content;
-    }
-
-    wrapWordsInSpans(html) {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const tagsToSkip = ['PRE'];
-
-        function wrap(node) {
-            if (node.nodeType === Node.TEXT_NODE && node.textContent.trim() && !tagsToSkip.includes(node.parentNode.tagName)) {
-                const words = node.textContent.split(/(\s+)/);
-                const frag = document.createDocumentFragment();
-                words.forEach(word => {
-                    if (word.trim()) {
-                        const span = document.createElement('span');
-                        span.setAttribute('data-word', '');
-                        span.textContent = word;
-                        frag.appendChild(span);
-                    } else {
-                        frag.appendChild(document.createTextNode(word));
-                    }
-                });
-                node.parentNode.replaceChild(frag, node);
-            } else if (node.nodeType === Node.ELEMENT_NODE && !tagsToSkip.includes(node.tagName)) {
-                Array.from(node.childNodes).forEach(wrap);
-            }
-        }
-        Array.from(doc.body.childNodes).forEach(wrap);
-        return doc.body.innerHTML;
+        const { renderResponseMarkdown } = require('./utils/responseMarkdown');
+        return renderResponseMarkdown(content, window);
     }
 
     navigateToPreviousResponse() {
@@ -1573,8 +1531,16 @@ export class AssistantView extends LitElement {
         const container = this.shadowRoot.querySelector('#responseContainer');
         if (container) {
             const currentResponse = this.getCurrentResponse();
-            const renderedResponse = this.renderMarkdown(currentResponse);
-            container.innerHTML = renderedResponse;
+            try {
+                const { handleResponseLink } = require('./utils/responseMarkdown');
+                const openExternal = url => require('electron').ipcRenderer.invoke('open-external', url);
+                container.onclick = event => handleResponseLink(event, container, openExternal);
+                container.onauxclick = event => handleResponseLink(event, container, openExternal);
+                container.replaceChildren(this.renderMarkdown(currentResponse));
+            } catch (error) {
+                console.warn('Could not display response:', error);
+                container.textContent = typeof currentResponse === 'string' ? currentResponse : '';
+            }
             if (this.shouldAnimateResponse) {
                 this.dispatchEvent(new CustomEvent('response-animation-complete', { bubbles: true, composed: true }));
             }

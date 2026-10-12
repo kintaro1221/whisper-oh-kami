@@ -1,7 +1,7 @@
 {
     "name": "whisper-oh-kami",
     "productName": "WhisperOhKAMI",
-    "version": "0.7.8",
+    "version": "0.7.9",
     "description": "Real-time AI hearing copilot for B2B sales discovery — 商談ヒアリングのささやきの神",
     "main": "src/index.js",
     "scripts": {
@@ -11,6 +11,7 @@
         "publish": "electron-forge publish",
         "lint": "echo \"No linting configured\"",
         "test": "jest",
+        "test:renderer-security": "electron tests/security/renderer-security.cjs",
         "build:icons": "node scripts/build-icons.js",
         "build:logos": "node scripts/build-logos.js",
         "notices": "node scripts/generate-notices.js",
@@ -38,6 +39,7 @@
     "dependencies": {
         "@google/genai": "^1.52.0",
         "@huggingface/transformers": "^4.3.1",
+        "dompurify": "^3.4.17",
         "electron-squirrel-startup": "^1.0.1",
         "ollama": "^0.6.3",
         "ws": "^8.21.0"
@@ -61,7 +63,7 @@
         "@electron-forge/plugin-fuses": "^7.11.0",
         "@electron/fuses": "^1.8.0",
         "@reforged/maker-appimage": "^5.0.0",
-        "electron": "^42.0.0",
+        "electron": "^42.11.12",
         "jest": "^29.7.0",
         "png2icons": "^2.0.1",
         "sharp": "^0.35.5",

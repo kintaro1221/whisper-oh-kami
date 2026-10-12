@@ -7,6 +7,7 @@ const os = require('os');
 const path = require('path');
 const { app, BrowserWindow, shell, ipcMain, safeStorage } = require('electron');
 const { createWindow, updateGlobalShortcuts } = require('./utils/window');
+const { openExternalFromMainFrame } = require('./utils/externalNavigation');
 const {
     setupGeminiIpcHandlers,
     stopMacOSAudioCapture,
@@ -470,15 +471,7 @@ function setupGeneralIpcHandlers() {
         }
     });
 
-    ipcMain.handle('open-external', async (event, url) => {
-        try {
-            await shell.openExternal(url);
-            return { success: true };
-        } catch (error) {
-            console.error('Error opening external URL:', error);
-            return { success: false, error: error.message };
-        }
-    });
+    ipcMain.handle('open-external', (event, url) => openExternalFromMainFrame(event, url, mainWindow, shell));
 
     ipcMain.on('update-keybinds', (event, newKeybinds) => {
         if (mainWindow) {

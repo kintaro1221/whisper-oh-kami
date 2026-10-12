@@ -1,6 +1,7 @@
 const { BrowserWindow, globalShortcut, ipcMain, screen } = require('electron');
 const path = require('node:path');
 const storage = require('../storage');
+const { protectWebContents } = require('./externalNavigation');
 const { detectDuplicateKeybinds, formatShortcutRegistrationResult, getDefaultKeybinds: getPolicyDefaultKeybinds } = require('./shortcutPolicy');
 
 let mouseEventsIgnored = false;
@@ -32,6 +33,8 @@ function createWindow(sendToRenderer, geminiSessionRef) {
         },
         backgroundColor: '#00000000',
     });
+
+    protectWebContents(mainWindow.webContents);
 
     const { session, desktopCapturer } = require('electron');
     session.defaultSession.setDisplayMediaRequestHandler(
