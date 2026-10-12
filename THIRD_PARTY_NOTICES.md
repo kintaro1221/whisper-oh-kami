@@ -7763,7 +7763,7 @@ and licensing information.
 
 ```
 
-License election: cairo is used under the Mozilla Public License, as listed for cairo in the sharp package README above and in https://github.com/lovell/sharp-libvips/blob/v1.3.3/THIRD-PARTY-NOTICES.md (Mozilla Public License 2.0). cairo 1.18.4 COPYING (reproduced verbatim above) offers LGPL 2.1 or MPL 1.1; the MPL 1.1 text is reproduced below, and the LGPL 2.1 text is retained for completeness.
+License election: cairo is used under the Mozilla Public License 1.1, as listed for cairo in the sharp package README above and in https://github.com/lovell/sharp-libvips/blob/v1.3.4/THIRD-PARTY-NOTICES.md. cairo 1.18.6 COPYING (reproduced verbatim above) offers LGPL 2.1 or MPL 1.1; the MPL 1.1 text is reproduced below, and the LGPL 2.1 text is retained for completeness.
 
 Additional pinned source: https://gitlab.freedesktop.org/cairo/cairo/-/raw/1.18.6/COPYING-LGPL-2.1
 
@@ -11916,7 +11916,7 @@ THE SOFTWARE.
 
 ```
 
-libnsgif (NetSurf, MIT License) has no separate release in the sharp binary: it is compiled from the copy vendored in the libvips 8.18.6 source tree (libvips/foreign/libnsgif, upstream snapshot last updated 22 Jan 2023), so it carries no version of its own in versions.json. The MIT License listing is confirmed by https://github.com/lovell/sharp-libvips/blob/v1.3.3/THIRD-PARTY-NOTICES.md (that notice is a license table only and reproduces no text); the text above is the vendored COPYING file at the pinned libvips tag.
+libnsgif (NetSurf, MIT License) has no separate release in the sharp binary: it is compiled from the copy vendored in the libvips 8.18.7 source tree (libvips/foreign/libnsgif), so it carries no version of its own in versions.json. The MIT License listing is confirmed by https://github.com/lovell/sharp-libvips/blob/v1.3.4/THIRD-PARTY-NOTICES.md (that notice is a license table only and reproduces no text); the text above is the vendored COPYING file at the pinned libvips tag.
 
 ### libpng@1.6.58
 
